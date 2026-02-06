@@ -137,9 +137,14 @@ async function loadStudioMovies(companyId, companyName) {
 }
 
 function calculateOracleScore(movie) {
+    // 1. SMART ORACLE SCORE (AI-driven)
+    if (movie.ai_score !== undefined && movie.ai_score !== null) {
+        return movie.ai_score;
+    }
+
+    // 2. Statistical Fallback
     let components = [];
 
-    // 1. Ratings normalization (0-100)
     // On movie objects from discover, use tmdb_rating if primary ratings aren't present
     if (movie.imdb_rating && movie.imdb_rating !== 'N/A') {
         const val = parseFloat(movie.imdb_rating);
@@ -161,7 +166,7 @@ function calculateOracleScore(movie) {
 
     let baseScore = components.reduce((a, b) => a + b, 0) / components.length;
 
-    // 2. Financial Modifiers
+    // 3. Financial Modifiers
     let modifier = 0;
 
     // ROI Modifier
