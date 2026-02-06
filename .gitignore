@@ -1,7 +1,38 @@
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.py[cod]
+*$py.class
+
+# Environment variables (SENSITIVE!)
 .env
-.DS_Store
-node_modules/
+.env.local
+.env.*.local
+
+# IDE
 .vscode/
 .idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+
+# Database & Cache
+*.db
+*.sqlite
+*.sqlite3
+movie_cache.db
+
+# Logs
+*.log
+
+# Misc
+nul
+.claude/
+.pytest_cache/
