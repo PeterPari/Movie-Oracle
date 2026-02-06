@@ -28,6 +28,20 @@ app.add_middleware(
 class SearchRequest(BaseModel):
     query: str
 
+class PersonLink(BaseModel):
+    name: str
+    imdb_url: str | None = None
+
+class WatchProviderItem(BaseModel):
+    name: str
+    logo_url: str | None = None
+
+class WatchProviders(BaseModel):
+    link: str | None = None
+    flatrate: list[WatchProviderItem] = []
+    rent: list[WatchProviderItem] = []
+    buy: list[WatchProviderItem] = []
+
 class MovieResult(BaseModel):
     tmdb_id: int | None = None
     title: str
@@ -44,14 +58,18 @@ class MovieResult(BaseModel):
     director: str | None = None
     writers: str | None = None
     actors: str | None = None
+    director_links: list[PersonLink] | None = None
+    actor_links: list[PersonLink] | None = None
     genres: str | None = None
     budget: str | None = None
+    budget_raw: int | None = None
     revenue: str | None = None
     runtime: int | None = None
     keywords: str | None = None
     production_countries: str | None = None
     spoken_languages: str | None = None
     streaming: str | None = None
+    watch_providers: WatchProviders | None = None
     roi: str | None = None
     performance: str | None = None
     performance_color: str | None = None
@@ -102,6 +120,21 @@ def search(request: SearchRequest):
 
     enriched = enrich_movie_data(raw_movies)
     formatted = [format_movie_result(m) for m in enriched]
+
+    # Budget post-filtering (TMDb discover doesn't support budget filters)
+    min_budget = params.get("min_budget")
+    max_budget = params.get("max_budget")
+    if min_budget or max_budget:
+        filtered = []
+        for m in formatted:
+            b = m.get("budget_raw", 0) or 0
+            if min_budget and b < min_budget:
+                continue
+            if max_budget and b > max_budget:
+                continue
+            filtered.append(m)
+        if filtered:
+            formatted = filtered
 
     try:
         ranking = rank_and_explain(query, formatted)
@@ -175,3 +208,5 @@ app.mount("/frontend", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend"
 def serve_app_js(): return FileResponse(FRONTEND_DIR / "app.js")
 @app.get("/discover.js")
 def serve_discover_js(): return FileResponse(FRONTEND_DIR / "discover.js")
+@app.get("/shared.js")
+def serve_shared_js(): return FileResponse(FRONTEND_DIR / "shared.js")

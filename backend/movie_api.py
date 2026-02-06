@@ -82,6 +82,36 @@ def _fetch_omdb_data(imdb_id: str) -> Dict:
     except Exception:
         return {}
 
+def _get_person_imdb_url(tmdb_person_id: int) -> Optional[str]:
+    """Fetch a person's IMDb URL from their TMDb ID."""
+    data = _tmdb_get(f"/person/{tmdb_person_id}", {})
+    imdb_id = data.get("imdb_id")
+    return f"https://www.imdb.com/name/{imdb_id}/" if imdb_id else None
+
+
+def _resolve_people_links(people: List[Dict]) -> List[Dict]:
+    """Resolve IMDb URLs for a list of crew/cast members in parallel."""
+    if not people:
+        return []
+    results = []
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {
+            executor.submit(_get_person_imdb_url, p["id"]): p
+            for p in people if p.get("id")
+        }
+        for future in as_completed(futures):
+            person = futures[future]
+            try:
+                imdb_url = future.result()
+            except Exception:
+                imdb_url = None
+            results.append({"name": person["name"], "imdb_url": imdb_url})
+    # Preserve original order
+    name_order = [p["name"] for p in people]
+    results.sort(key=lambda r: name_order.index(r["name"]) if r["name"] in name_order else 999)
+    return results
+
+
 # --- Search Strategies ---
 
 def _resolve_person_ids(names, job=None):
@@ -298,10 +328,23 @@ def format_movie_result(tmdb: Dict) -> Dict:
             perf = "Flop"
             perf_color = "red"
 
-    # Streaming Check
+    # Watch Providers (structured)
     providers = tmdb.get("watch/providers", {}).get("results", {}).get("US", {})
-    flatrate = [p["provider_name"] for p in providers.get("flatrate", [])]
-    streaming = ", ".join(flatrate) if flatrate else None
+    LOGO_BASE = "https://image.tmdb.org/t/p/original"
+
+    def _fmt_providers(plist):
+        return [{"name": p["provider_name"], "logo_url": f"{LOGO_BASE}{p['logo_path']}"} for p in plist if p.get("logo_path")]
+
+    flatrate = providers.get("flatrate", [])
+    streaming = ", ".join(p["provider_name"] for p in flatrate) if flatrate else None
+    watch_providers = None
+    if providers:
+        watch_providers = {
+            "link": providers.get("link"),
+            "flatrate": _fmt_providers(flatrate),
+            "rent": _fmt_providers(providers.get("rent", [])),
+            "buy": _fmt_providers(providers.get("buy", [])),
+        }
 
     # OMDb Ratings
     rt_score = "N/A"
@@ -325,6 +368,8 @@ def format_movie_result(tmdb: Dict) -> Dict:
         "director": omdb.get("Director") or ", ".join([c["name"] for c in tmdb.get("credits", {}).get("crew", []) if c.get("job") == "Director"]),
         "writers": omdb.get("Writer"),
         "actors": omdb.get("Actors") or ", ".join([c["name"] for c in tmdb.get("credits", {}).get("cast", [])[:5]]),
+        "director_links": _resolve_people_links([c for c in tmdb.get("credits", {}).get("crew", []) if c.get("job") == "Director"]),
+        "actor_links": _resolve_people_links(tmdb.get("credits", {}).get("cast", [])[:5]),
         "genres": ", ".join([g["name"] for g in tmdb.get("genres", [])]) if tmdb.get("genres") else None,
         "budget": budget_str,
         "revenue": revenue_str,
@@ -335,7 +380,9 @@ def format_movie_result(tmdb: Dict) -> Dict:
         "keywords": ", ".join([k["name"] for k in tmdb.get("keywords", {}).get("keywords", [])[:5]]),
         "production_countries": ", ".join([c["name"] for c in tmdb.get("production_countries", [])]),
         "spoken_languages": ", ".join([l["english_name"] for l in tmdb.get("spoken_languages", [])]),
-        "streaming": streaming
+        "streaming": streaming,
+        "watch_providers": watch_providers,
+        "budget_raw": budget_raw,
     }
 
 def get_trending_movies() -> List[Dict]:
