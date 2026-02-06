@@ -83,52 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ===== SMOOTH SLIDE-TO-TOP TRANSITION =====
-function transitionToResults() {
-    if (hasTransitioned) return;
-    hasTransitioned = true;
-
-    // 1. Snapshot the search bar's current centered position
-    const searchRect = searchContainer.getBoundingClientRect();
-    const startTop = searchRect.top;
-
-    // 2. Prepare for layout shift: hide hero and examples immediately
-    if (heroText) {
-        heroText.style.opacity = '0';
-        heroText.style.maxHeight = '0';
-        heroText.style.marginBottom = '0';
-        heroText.style.overflow = 'hidden';
-    }
-    if (examples) {
-        examples.style.opacity = '0';
-        examples.style.maxHeight = '0';
-        examples.style.margin = '0';
-    }
-
-    // 3. Switch to top-aligned layout (results mode)
-    document.body.classList.add('results-mode');
-
-    // 4. Snapshot the search bar's new layout position (at the top)
-    const endTop = searchContainer.getBoundingClientRect().top;
-
-    // 5. Calculate how far we need to "undo" the layout shift visually
-    const deltaY = startTop - endTop;
-
-    // 6. Apply compensation to the ENTIRE container so loading elements move WITH the search bar
-    contentCenter.style.transition = 'none';
-    contentCenter.style.transform = `translateY(${deltaY}px)`;
-
-    // 7. Force reflow
-    contentCenter.offsetHeight;
-
-    // 8. Animate the container back to its 0 position smoothly
-    contentCenter.style.transition = 'transform 1.1s cubic-bezier(0.19, 1, 0.22, 1)';
-    contentCenter.style.transform = 'translateY(0)';
-
-    // Cleanup transition property after animation completes
-    setTimeout(() => {
-        contentCenter.style.transition = '';
-    }, 1200);
-}
+// REMOVED PER USER REQUEST
 
 // ===== LETTER-BY-LETTER ORACLE ANIMATION =====
 function animateOracleText() {
@@ -154,7 +109,7 @@ async function handleSearch() {
     const query = searchInput.value.trim();
     if (!query) return;
 
-    transitionToResults();
+    transitionToResults(); // REMOVED
     window.scrollTo({ top: 0, behavior: 'smooth' });
     showLoading();
 
@@ -531,14 +486,20 @@ function cycleStatusMessages() {
 
     let index = 0;
 
-    // Initial State
-    subtitleEl.textContent = loadingSteps[0].text;
-    progressEl.style.width = loadingSteps[0].percent; // Set initial width
+    // Initial State - Reset explicitly to 0% first to allow transition
+    progressEl.style.width = '0%';
+    subtitleEl.textContent = 'Initializing...';
 
     // Style the text
     subtitleEl.className = 'text-accent-gold/70 uppercase tracking-[0.2em] text-[10px] font-bold animate-pulse';
 
     if (statusInterval) clearInterval(statusInterval);
+
+    // Small delay to allow the 0% width to apply before jumping to first step
+    setTimeout(() => {
+        subtitleEl.textContent = loadingSteps[0].text;
+        progressEl.style.width = loadingSteps[0].percent; // Set initial width
+    }, 50);
 
     statusInterval = setInterval(() => {
         index++;
