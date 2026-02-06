@@ -99,11 +99,9 @@ function transitionToResults() {
 // ===== LETTER-BY-LETTER ORACLE ANIMATION =====
 function animateOracleText() {
     const titleEl = document.getElementById('loading-title');
-    const subtitleEl = document.getElementById('loading-subtitle');
-    if (!titleEl || !subtitleEl) return;
+    if (!titleEl) return;
 
     const titleText = 'Consulting the Oracle';
-    const subtitleText = 'Scanning the cinematic multiverse';
 
     // Build letter-by-letter HTML for title
     titleEl.innerHTML = '';
@@ -116,10 +114,6 @@ function animateOracleText() {
         span.textContent = titleText[i] === ' ' ? '\u00A0' : titleText[i];
         titleEl.appendChild(span);
     }
-
-    // Animate subtitle after title completes
-    subtitleEl.textContent = subtitleText;
-    subtitleEl.className = 'text-cream/30 uppercase tracking-[0.2em] text-[10px] oracle-subtitle-animated';
 }
 
 async function handleSearch() {
@@ -451,6 +445,41 @@ function closeModal() {
     document.body.style.overflow = 'auto';
 }
 
+// --- NEW LOADING LOGIC ---
+let statusInterval;
+
+const loadingMessages = [
+    "Establishing Secure Link...",
+    "Contacting Movie API...",
+    "Parsing Search Query...",
+    "Scanning Database...",
+    "Cross-referencing Ratings...",
+    "Calculating ROI & Budget...",
+    "Finalizing Oracle Prediction..."
+];
+
+function cycleStatusMessages() {
+    const subtitleEl = document.getElementById('loading-subtitle');
+    if (!subtitleEl) return;
+
+    let index = 0;
+
+    // Reset to first message immediately
+    subtitleEl.textContent = loadingMessages[0];
+
+    // Make text Gold so it stands out more than the old grey
+    subtitleEl.className = 'text-accent-gold/70 uppercase tracking-[0.2em] text-[10px] font-bold animate-pulse';
+
+    // Clear any existing interval to prevent speeding up
+    if (statusInterval) clearInterval(statusInterval);
+
+    // Update message every 800ms
+    statusInterval = setInterval(() => {
+        index = (index + 1) % loadingMessages.length;
+        subtitleEl.textContent = loadingMessages[index];
+    }, 800);
+}
+
 function showLoading() {
     loading.classList.remove('hidden');
     if (dashboard) dashboard.classList.add('hidden');
@@ -458,13 +487,19 @@ function showLoading() {
     emptyState.classList.add('hidden');
     errorState.classList.add('hidden');
 
-    // Trigger the letter-by-letter oracle animation
+    // 1. Animate the Title (Keep your existing Oracle text effect)
     animateOracleText();
+
+    // 2. Start the new Status Cycle (Replaces the static subtitle)
+    cycleStatusMessages();
+
     lucide.createIcons();
 }
 
 function hideLoading() {
     loading.classList.add('hidden');
+    // Stop the text cycle so it doesn't keep running in the background
+    if (statusInterval) clearInterval(statusInterval);
 }
 
 function showError(message) {
@@ -476,7 +511,7 @@ function showError(message) {
             </div>
             <h3 class="text-xl font-bold text-white mb-2">Oracle Interference</h3>
             <p class="text-slate-400 text-sm mb-6">${escapeHtml(message)}</p>
-            <button onclick="window.location.reload()" class="bg-white/5 hover:bg-white/10 px-6 py-2 rounded-xl text-white text-sm font-bold transition-colors">Retry</button>
+            <button onclick="handleSearch()" class="bg-white/5 hover:bg-white/10 px-6 py-2 rounded-xl text-white text-sm font-bold transition-colors">Retry</button>
         </div>`;
     errorState.classList.remove('hidden');
     lucide.createIcons();

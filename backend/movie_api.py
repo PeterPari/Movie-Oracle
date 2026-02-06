@@ -1,7 +1,7 @@
 import os
 import requests
 import json
-import sqlite3
+
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Optional
@@ -23,52 +23,8 @@ OMDB_BASE = "http://www.omdbapi.com/"
 _session = requests.Session()
 
 
-class SQLiteCache:
-    def __init__(self, db_path="movie_cache.db"):
-        self.db_path = db_path
-        self._init_db()
+from backend.cache import db_cache
 
-    def _init_db(self):
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS cache (
-                        key TEXT PRIMARY KEY,
-                        value TEXT,
-                        expiry INTEGER
-                    )
-                """)
-        except Exception as e:
-            print(f"Cache Init Error: {e}")
-
-    def get(self, key: str) -> Optional[Dict]:
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.execute("SELECT value, expiry FROM cache WHERE key = ?", (key,))
-                row = cursor.fetchone()
-                if row:
-                    value, expiry = row
-                    if expiry > time.time():
-                        return json.loads(value)
-                    else:
-                        conn.execute("DELETE FROM cache WHERE key = ?", (key,))
-        except Exception:
-            pass
-        return None
-
-    def set(self, key: str, value: Any, ttl=86400): # Default 24h
-        try:
-            expiry = int(time.time() + ttl)
-            with sqlite3.connect(self.db_path) as conn:
-                conn.execute(
-                    "INSERT OR REPLACE INTO cache (key, value, expiry) VALUES (?, ?, ?)",
-                    (key, json.dumps(value), expiry)
-                )
-        except Exception:
-            pass
-
-# Initialize global cache
-db_cache = SQLiteCache()
 
 def _tmdb_get(path: str, params: Dict = None) -> Dict:
     """Helper for TMDb API calls with persistent caching."""

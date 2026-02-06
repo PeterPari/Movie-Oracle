@@ -129,21 +129,63 @@ Return ONLY valid JSON, no markdown:
 Be opinionated and helpful. If some results don't match well, say so honestly. If the results are great matches, be enthusiastic."""
 
 
+import hashlib
+import threading
+from tenacity import retry, stop_after_attempt, wait_exponential
+from backend.cache import db_cache
+
+# Limit concurrent Gemini calls to prevent rate limiting
+gemini_semaphore = threading.Semaphore(5)
+
+def _call_gemini_with_retry(model, contents, config):
+    """Helper for tenacity retry logic"""
+    return client.models.generate_content(
+        model=model,
+        contents=contents,
+        config=config
+    )
+
+# Retry up to 3 times, waiting 2s, 4s, 8s between attempts
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def _safe_generate_content(model, contents, config):
+    return _call_gemini_with_retry(model, contents, config)
+
 def _call_gemini(system_prompt, user_prompt, temperature=0.3):
-    """Call Google Gemini API using official SDK"""
+    """Call Google Gemini API using official SDK with caching and retries"""
+    
+    # 1. Create a unique key for this specific request
+    prompt_hash = hashlib.md5((system_prompt + user_prompt).encode()).hexdigest()
+    cache_key = f"gemini:{prompt_hash}:{temperature}"
+
+    # 2. Check cache first
+    cached_response = db_cache.get(cache_key)
+    if cached_response:
+        return cached_response
+
     # Combine system and user prompts
     combined_prompt = f"{system_prompt}\n\nUser Query: {user_prompt}"
     
-    response = client.models.generate_content(
-        model="gemini-3-flash-preview",
-        contents=combined_prompt,
-        config={
-            "temperature": temperature,
-            "max_output_tokens": 2000,
-        }
-    )
-    
-    return response.text
+    try:
+        # 3. Call API with retry logic and concurrency limit
+        with gemini_semaphore:
+            response = _safe_generate_content(
+                model="gemini-3-flash-preview",
+                contents=combined_prompt,
+                config={
+                    "temperature": temperature,
+                    "max_output_tokens": 1000, 
+                }
+            )
+        text_response = response.text
+        
+        # 4. Save to cache (24 hours)
+        db_cache.set(cache_key, text_response, ttl=86400)
+        return text_response
+        
+    except Exception as e:
+        print(f"Gemini API Error after retries: {e}")
+        # Return empty JSON string as safe fallback
+        return "{}"
 
 
 def _parse_json_response(content):
