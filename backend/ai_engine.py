@@ -42,7 +42,14 @@ EXTRACT_SYSTEM_PROMPT = """You are the Movie Oracle — an expert AI movie conci
 
 **People**: actors[], directors[] — use full canonical names (e.g. "Bryan Cranston" not "that guy from Breaking Bad")
 **Genres**: Use TMDb genre names: action, adventure, animation, comedy, crime, documentary, drama, family, fantasy, history, horror, music, mystery, romance, science fiction, thriller, war, western
-**tmdb_keyword_tags**: TMDb keyword slugs for themes/tropes. Examples: time-travel, heist, revenge, twist-ending, based-on-true-story, dystopia, coming-of-age, survival, serial-killer, alien, zombie, haunted-house, road-trip, underdog, conspiracy, artificial-intelligence, vampire, superhero, prison, treasure, bounty-hunter
+**tmdb_keyword_tags**: ONLY use keywords from this verified list (these are real TMDb keywords that will actually work):
+  Themes: heist, revenge, dystopia, conspiracy, survival, prison, treasure, underdog, redemption, jealousy, fate, betrayal, friendship, love triangle, obsession, ambition, isolation, sacrifice, corruption, propaganda
+  Tropes: twist ending, based on true story, time travel, coming of age, fish out of water, road trip, found footage, haunted house, buddy cop, chase, mistaken identity, rescue, one man army, against the odds, chosen one
+  Vibes: feel good, heartwarming, dark humor, cult, surreal, atmospheric, gritty, noir, campy, dreamlike, offbeat, quirky, absurdist, cerebral, visceral, psychological, slow burn, suspenseful, mind-bending
+  Creatures: alien, zombie, vampire, superhero, serial killer, bounty hunter, robot, dragon, dinosaur, ghost, monster, werewolf, witch, demon, pirate
+  Settings: space, underwater, desert, jungle, post-apocalyptic future, small town, new york city, hospital, school, courtroom, prison, arctic, island
+  Content: independent film, b movie, anime, mockumentary, anthology, musical, satire, parody, remake, sequel, prequel, biography, documentary
+  IMPORTANT: Use spaces, not hyphens (e.g. "time travel" not "time-travel", "coming of age" not "coming-of-age"). Pick 2-4 tags max. Only use tags from this list.
 **companies**: Studio names exactly as TMDb has them: "A24", "Marvel Studios", "Pixar", "Studio Ghibli", "Blumhouse Productions", "Focus Features", "Lionsgate"
 **Budget**: min_budget/max_budget in raw dollars. "low budget" ≈ max_budget: 5000000. "big budget" ≈ min_budget: 80000000
 **Ratings**: min_rating/max_rating on TMDb 0-10 scale. "good" ≈ 7.0+, "great" ≈ 7.5+, "masterpiece" ≈ 8.0+
@@ -56,19 +63,19 @@ EXTRACT_SYSTEM_PROMPT = """You are the Movie Oracle — an expert AI movie conci
 ## EXAMPLES
 
 Query: "comfort movies"
-{"strategies":["discover"],"keywords":"comfort movies feel good","tmdb_keyword_tags":["feel-good","heartwarming"],"genres":["comedy","drama","romance"],"exclude_genres":["horror","thriller"],"companies":[],"actors":[],"directors":[],"crew":[],"year_from":null,"year_to":null,"min_rating":7.0,"max_rating":null,"min_votes":200,"min_budget":null,"max_budget":null,"sort_by":"popularity.desc","language":null,"region":null,"similar_to_title":null,"runtime_min":null,"runtime_max":null,"include_adult":false,"explanation":"Wrapping you in cinema's warmest blanket — guaranteed soul-soothing picks"}
+{"strategies":["discover"],"keywords":"comfort movies feel good","tmdb_keyword_tags":["feel good","heartwarming"],"genres":["comedy","drama","romance"],"exclude_genres":["horror","thriller"],"companies":[],"actors":[],"directors":[],"crew":[],"year_from":null,"year_to":null,"min_rating":7.0,"max_rating":null,"min_votes":200,"min_budget":null,"max_budget":null,"sort_by":"popularity.desc","language":null,"region":null,"similar_to_title":null,"runtime_min":null,"runtime_max":null,"include_adult":false,"explanation":"Wrapping you in cinema's warmest blanket — guaranteed soul-soothing picks"}
 
 Query: "movies that will mess with my head"
-{"strategies":["discover"],"keywords":"mind bending psychological","tmdb_keyword_tags":["twist-ending","nonlinear-timeline","psychological","mindfuck"],"genres":["thriller","science fiction","mystery"],"exclude_genres":[],"companies":[],"actors":[],"directors":[],"crew":[],"year_from":null,"year_to":null,"min_rating":7.0,"max_rating":null,"min_votes":300,"min_budget":null,"max_budget":null,"sort_by":"vote_average.desc","language":null,"region":null,"similar_to_title":null,"runtime_min":null,"runtime_max":null,"include_adult":false,"explanation":"Prepare for cerebral cinema that'll have you questioning reality long after the credits roll"}
+{"strategies":["discover"],"keywords":"mind bending psychological","tmdb_keyword_tags":["twist ending","psychological","cerebral"],"genres":["thriller","science fiction","mystery"],"exclude_genres":[],"companies":[],"actors":[],"directors":[],"crew":[],"year_from":null,"year_to":null,"min_rating":7.0,"max_rating":null,"min_votes":300,"min_budget":null,"max_budget":null,"sort_by":"vote_average.desc","language":null,"region":null,"similar_to_title":null,"runtime_min":null,"runtime_max":null,"include_adult":false,"explanation":"Prepare for cerebral cinema that'll have you questioning reality long after the credits roll"}
 
 Query: "Tom Hanks 90s dramas"
 {"strategies":["discover"],"keywords":"Tom Hanks 90s drama","tmdb_keyword_tags":[],"genres":["drama"],"exclude_genres":[],"companies":[],"actors":["Tom Hanks"],"directors":[],"crew":[],"year_from":1990,"year_to":1999,"min_rating":null,"max_rating":null,"min_votes":100,"min_budget":null,"max_budget":null,"sort_by":"popularity.desc","language":null,"region":null,"similar_to_title":null,"runtime_min":null,"runtime_max":null,"include_adult":false,"explanation":"Diving into Hanks' finest dramatic work from the decade that cemented his legend"}
 
 Query: "movies like Parasite"
-{"strategies":["similar"],"keywords":"Parasite","tmdb_keyword_tags":["social-commentary","dark-humor","class-differences"],"genres":["thriller","drama"],"exclude_genres":[],"companies":[],"actors":[],"directors":[],"crew":[],"year_from":null,"year_to":null,"min_rating":7.0,"max_rating":null,"min_votes":100,"min_budget":null,"max_budget":null,"sort_by":"vote_average.desc","language":null,"region":null,"similar_to_title":"Parasite","runtime_min":null,"runtime_max":null,"include_adult":false,"explanation":"Hunting for films that match Parasite's razor-sharp social satire and genre-bending brilliance"}
+{"strategies":["similar"],"keywords":"Parasite","tmdb_keyword_tags":["dark humor","satire"],"genres":["thriller","drama"],"exclude_genres":[],"companies":[],"actors":[],"directors":[],"crew":[],"year_from":null,"year_to":null,"min_rating":7.0,"max_rating":null,"min_votes":100,"min_budget":null,"max_budget":null,"sort_by":"vote_average.desc","language":null,"region":null,"similar_to_title":"Parasite","runtime_min":null,"runtime_max":null,"include_adult":false,"explanation":"Hunting for films that match Parasite's razor-sharp social satire and genre-bending brilliance"}
 
 Query: "A24 horror"
-{"strategies":["discover"],"keywords":"A24 horror","tmdb_keyword_tags":["psychological","slow-burn"],"genres":["horror"],"exclude_genres":[],"companies":["A24"],"actors":[],"directors":[],"crew":[],"year_from":null,"year_to":null,"min_rating":6.0,"max_rating":null,"min_votes":100,"min_budget":null,"max_budget":null,"sort_by":"popularity.desc","language":null,"region":null,"similar_to_title":null,"runtime_min":null,"runtime_max":null,"include_adult":false,"explanation":"Summoning A24's finest — elevated horror that haunts your mind, not just your nightmares"}
+{"strategies":["discover"],"keywords":"A24 horror","tmdb_keyword_tags":["psychological","slow burn"],"genres":["horror"],"exclude_genres":[],"companies":["A24"],"actors":[],"directors":[],"crew":[],"year_from":null,"year_to":null,"min_rating":6.0,"max_rating":null,"min_votes":100,"min_budget":null,"max_budget":null,"sort_by":"popularity.desc","language":null,"region":null,"similar_to_title":null,"runtime_min":null,"runtime_max":null,"include_adult":false,"explanation":"Summoning A24's finest — elevated horror that haunts your mind, not just your nightmares"}
 
 Query: "what should I watch tonight"
 {"strategies":["discover"],"keywords":"popular recent movies","tmdb_keyword_tags":[],"genres":[],"exclude_genres":[],"companies":[],"actors":[],"directors":[],"crew":[],"year_from":2022,"year_to":null,"min_rating":7.0,"max_rating":null,"min_votes":500,"min_budget":null,"max_budget":null,"sort_by":"popularity.desc","language":null,"region":null,"similar_to_title":null,"runtime_min":null,"runtime_max":null,"include_adult":false,"explanation":"Curating tonight's perfect lineup from the best recent releases"}
@@ -147,6 +154,17 @@ def extract_search_params(query):
     try:
         content = _call_gemini(EXTRACT_SYSTEM_PROMPT, query, temperature=0.2)
         params = _parse_json_response(content)
+
+        # Detect empty/failed AI response (Gemini returns "{}" on error)
+        has_useful_params = (
+            params.get("genres") or params.get("tmdb_keyword_tags") or
+            params.get("actors") or params.get("directors") or
+            params.get("companies") or params.get("similar_to_title") or
+            params.get("year_from") or params.get("year_to")
+        )
+        if not has_useful_params:
+            raise ValueError("AI returned empty params, using smart fallback")
+
         # Defaults
         defaults = {
             "strategies": ["discover"], "keywords": query, "tmdb_keyword_tags": [],
@@ -155,17 +173,21 @@ def extract_search_params(query):
         }
         for k, v in defaults.items():
             params.setdefault(k, v)
+        params["_original_query"] = query
         return params
     except Exception as e:
         print(f"AI extraction failed: {e}")
-        # Use discover for natural language fallback, not title_search
+        # Use discover with query words as keyword tags for better results
+        # e.g. "Cult Classics" -> try ["cult", "classics"] as keyword tags
+        query_words = [w.lower() for w in query.split() if len(w) >= 3]
         return {
             "strategies": ["discover"],
             "keywords": query,
             "genres": [],
-            "tmdb_keyword_tags": [],
+            "tmdb_keyword_tags": query_words[:3],
             "sort_by": "popularity.desc",
             "min_votes": 50,
+            "_original_query": query,
             "explanation": f"Exploring: {query}"
         }
 

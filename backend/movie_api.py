@@ -127,20 +127,38 @@ def _resolve_keyword_ids(tags):
     keyword_ids = []
     seen = set()
     for tag in tags:
-        # Try the tag as-is first, then fall back to variations
+        # Build search variations: as-is, dehyphenated, individual words
         variations = [tag]
         if "-" in tag:
-            # "cult-film" -> "cult film" -> "cult"
             variations.append(tag.replace("-", " "))
             variations.extend(tag.split("-"))
+
         for variant in variations:
             data = _tmdb_get("/search/keyword", {"query": variant})
             results = data.get("results", [])
-            if results:
-                kid = results[0]["id"]
-                if kid not in seen:
-                    seen.add(kid)
-                    keyword_ids.append(kid)
+            if not results:
+                continue
+
+            # Prefer exact/close matches to avoid false positives
+            # (e.g. "rags-to-riches" matching "riches to rags")
+            norm = variant.lower().replace("-", " ").strip()
+            best = None
+            for r in results[:5]:
+                rname = r["name"].lower().strip()
+                if rname == norm:
+                    best = r["id"]
+                    break
+                # Accept if query is contained in result or vice versa
+                if not best and (norm in rname or rname in norm):
+                    best = r["id"]
+
+            # Fall back to first result only for single-word queries
+            if not best and len(norm.split()) == 1:
+                best = results[0]["id"]
+
+            if best and best not in seen:
+                seen.add(best)
+                keyword_ids.append(best)
                 break  # Found a match for this tag, move to next
     return keyword_ids
 
@@ -297,17 +315,27 @@ def search_movies(params: Dict) -> List[Dict]:
             print(f"Strategy {strategy} failed: {e}")
             continue
 
-    # FALLBACK: If discover returned nothing, try title search
+    # FALLBACK: If discover returned nothing, try title search with multiple variations
     if not all_results and "discover" in strategies and params.get("keywords"):
-        try:
-            results = _search_by_title(params)
-            for m in results:
-                mid = m.get("id")
-                if mid and mid not in seen_ids:
-                    seen_ids.add(mid)
-                    all_results.append(m)
-        except Exception:
-            pass
+        keywords = params["keywords"]
+        # Try the full keywords string, then the original query, then individual words
+        search_attempts = [keywords]
+        original_query = params.get("_original_query", "")
+        if original_query and original_query != keywords:
+            search_attempts.append(original_query)
+        for attempt in search_attempts:
+            try:
+                data = _tmdb_get("/search/movie", {"query": attempt, "page": 1})
+                results = data.get("results", [])[:10]
+                for m in results:
+                    mid = m.get("id")
+                    if mid and mid not in seen_ids:
+                        seen_ids.add(mid)
+                        all_results.append(m)
+                if all_results:
+                    break
+            except Exception:
+                pass
 
     return all_results[:10]
 
