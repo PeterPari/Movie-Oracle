@@ -125,11 +125,23 @@ def _resolve_person_ids(names, job=None):
 
 def _resolve_keyword_ids(tags):
     keyword_ids = []
+    seen = set()
     for tag in tags:
-        data = _tmdb_get("/search/keyword", {"query": tag})
-        results = data.get("results", [])
-        if results:
-            keyword_ids.append(results[0]["id"])
+        # Try the tag as-is first, then fall back to variations
+        variations = [tag]
+        if "-" in tag:
+            # "cult-film" -> "cult film" -> "cult"
+            variations.append(tag.replace("-", " "))
+            variations.extend(tag.split("-"))
+        for variant in variations:
+            data = _tmdb_get("/search/keyword", {"query": variant})
+            results = data.get("results", [])
+            if results:
+                kid = results[0]["id"]
+                if kid not in seen:
+                    seen.add(kid)
+                    keyword_ids.append(kid)
+                break  # Found a match for this tag, move to next
     return keyword_ids
 
 def _resolve_company_ids(names):
@@ -203,7 +215,10 @@ def _search_by_discover(params):
         "vote_count.gte": params.get("min_votes") or 50,
     }
 
-    if genre_ids: discover_params["with_genres"] = ",".join(str(g) for g in genre_ids)
+    # Use OR (|) for 3+ genres so movies don't need ALL genres at once
+    if genre_ids:
+        sep = "|" if len(genre_ids) >= 3 else ","
+        discover_params["with_genres"] = sep.join(str(g) for g in genre_ids)
     if person_ids: discover_params["with_cast"] = "|".join(str(p) for p in person_ids)
     if director_ids: discover_params["with_crew"] = "|".join(str(d) for d in director_ids)
     if company_ids: discover_params["with_companies"] = "|".join(str(c) for c in company_ids)
@@ -226,6 +241,37 @@ def _search_similar(params):
     data = _tmdb_get(f"/movie/{movie_id}/recommendations", {"page": 1})
     return data.get("results", [])[:10]
 
+def _discover_relaxed(params: Dict) -> List[Dict]:
+    """Try discover with progressively relaxed constraints until enough results appear."""
+    MIN_RESULTS = 5
+
+    # Attempt 1: Full params as-is
+    results = _search_by_discover(params)
+    if len(results) >= MIN_RESULTS:
+        return results
+
+    # Attempt 2: Drop keywords (they're often the most restrictive filter)
+    if params.get("tmdb_keyword_tags"):
+        relaxed = {**params, "tmdb_keyword_tags": []}
+        relaxed_results = _search_by_discover(relaxed)
+        if len(relaxed_results) >= MIN_RESULTS:
+            print("Relaxed: dropped keywords")
+            return relaxed_results
+        # Keep whichever gave more
+        if len(relaxed_results) > len(results):
+            results = relaxed_results
+
+    # Attempt 3: Drop keywords + loosen rating/votes
+    if len(results) < MIN_RESULTS:
+        relaxed = {**params, "tmdb_keyword_tags": [], "min_rating": None, "min_votes": 50}
+        relaxed_results = _search_by_discover(relaxed)
+        if len(relaxed_results) > len(results):
+            print("Relaxed: dropped keywords + loosened filters")
+            results = relaxed_results
+
+    return results
+
+
 def search_movies(params: Dict) -> List[Dict]:
     """Orchestrate search using multiple strategies with automatic fallback."""
     strategies = params.get("strategies", ["discover"])
@@ -235,12 +281,12 @@ def search_movies(params: Dict) -> List[Dict]:
     for strategy in strategies:
         try:
             if strategy == "title_search": results = _search_by_title(params)
-            elif strategy == "discover": results = _search_by_discover(params)
+            elif strategy == "discover": results = _discover_relaxed(params)
             elif strategy == "similar": results = _search_similar(params)
             elif strategy == "multi_search":
-                results = _search_by_discover(params)
+                results = _discover_relaxed(params)
                 if len(results) < 5: results += _search_by_title(params)
-            else: results = _search_by_discover(params)
+            else: results = _discover_relaxed(params)
 
             for m in results:
                 mid = m.get("id")
