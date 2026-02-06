@@ -1,12 +1,18 @@
 import os
 import json
 import requests
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+
+# Rate limiting: track last API call time
+_last_api_call = 0
+_MIN_DELAY_BETWEEN_CALLS = 1.0  # 1 second between calls
+
 
 GENRE_MAP = {
     "action": 28,
@@ -127,7 +133,15 @@ Be opinionated and helpful. If some results don't match well, say so honestly. I
 
 
 def _call_gemini(system_prompt, user_prompt, temperature=0.3):
-    """Call Google Gemini API directly"""
+    """Call Google Gemini API directly with rate limiting"""
+    global _last_api_call
+    
+    # Rate limiting: ensure minimum delay between calls
+    current_time = time.time()
+    time_since_last_call = current_time - _last_api_call
+    if time_since_last_call < _MIN_DELAY_BETWEEN_CALLS:
+        time.sleep(_MIN_DELAY_BETWEEN_CALLS - time_since_last_call)
+    
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": GEMINI_API_KEY,
@@ -152,12 +166,27 @@ def _call_gemini(system_prompt, user_prompt, temperature=0.3):
         }
     }
     
-    response = requests.post(GEMINI_URL, headers=headers, json=payload, timeout=30)
-    response.raise_for_status()
-    data = response.json()
-    
-    # Extract text from Gemini's response format
-    return data["candidates"][0]["content"]["parts"][0]["text"]
+    try:
+        response = requests.post(GEMINI_URL, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Update last call time on success
+        _last_api_call = time.time()
+        
+        # Extract text from Gemini's response format
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 429:
+            # Rate limit hit - wait longer and retry once
+            time.sleep(3)
+            response = requests.post(GEMINI_URL, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            _last_api_call = time.time()
+            return data["candidates"][0]["content"]["parts"][0]["text"]
+        else:
+            raise
 
 
 def _parse_json_response(content):
