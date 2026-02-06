@@ -116,7 +116,7 @@ def _call_gemini(system_prompt, user_prompt, temperature=0.3):
     try:
         with gemini_semaphore:
             response = _safe_generate_content(
-                model="gemini-3-flash-preview", 
+                model="gemini-2.0-flash-lite",
                 contents=combined_prompt,
                 config={"temperature": temperature, "max_output_tokens": 2000}
             )

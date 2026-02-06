@@ -404,11 +404,14 @@ function cycleStatusMessages() {
 }
 
 function showLoading() {
+    const mainContent = document.getElementById('main-content');
+    if (mainContent) mainContent.classList.remove('hidden');
     loading.classList.remove('hidden');
     if (dashboard) dashboard.classList.add('hidden');
     searchResults.classList.add('hidden');
     emptyState.classList.add('hidden');
     errorState.classList.add('hidden');
+    document.body.classList.add('results-mode');
     animateOracleText();
     cycleStatusMessages();
     lucide.createIcons();
@@ -421,6 +424,8 @@ function hideLoading() {
 
 function showError(message, query) {
     hideLoading();
+    const mainContent = document.getElementById('main-content');
+    if (mainContent) mainContent.classList.remove('hidden');
     const retryCall = query ? `handleSearch('${escapeHtml(query)}')` : 'handleSearch()';
 
     errorState.innerHTML = `

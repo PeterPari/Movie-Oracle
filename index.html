@@ -98,7 +98,6 @@
             display: flex;
             flex-direction: column;
             min-height: 100vh;
-            padding: 2rem;
             box-sizing: border-box;
         }
 
@@ -108,11 +107,11 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
+            padding: 2rem;
         }
 
         #search-container {
             transition: opacity 0.5s ease;
-            will-change: transform;
         }
 
         body.results-mode #content-center {
@@ -370,7 +369,7 @@
                 </div>
 
             </div>
-            <main class="w-full max-w-7xl mx-auto px-6 space-y-12">
+            <main id="main-content" class="w-full max-w-7xl mx-auto px-6 space-y-12 hidden">
                 <!-- Loading State -->
                 <div id="loading" class="hidden py-16 text-center">
                     <div class="relative inline-block mb-8">
@@ -441,14 +440,15 @@
                 </div>
             </main>
 
-            <footer class="w-full py-12 flex justify-center items-center gap-8 z-10 opacity-30 mt-auto">
-                <a href="/"
-                    class="text-[9px] uppercase tracking-[0.3em] font-bold text-cream hover:text-accent-gold transition-colors">Oracle</a>
-                <span class="w-1 h-1 bg-white/10 rounded-full"></span>
-                <a href="/discover"
-                    class="text-[9px] uppercase tracking-[0.3em] font-bold text-cream hover:text-accent-gold transition-colors">Discover</a>
-            </footer>
         </div>
+        <footer class="w-full py-12 flex justify-center items-center gap-8 z-10 opacity-30 mt-auto">
+            <a href="/"
+                class="text-[9px] uppercase tracking-[0.3em] font-bold text-cream hover:text-accent-gold transition-colors">Oracle</a>
+            <span class="w-1 h-1 bg-white/10 rounded-full"></span>
+            <a href="/discover"
+                class="text-[9px] uppercase tracking-[0.3em] font-bold text-cream hover:text-accent-gold transition-colors">Discover</a>
+        </footer>
+    </div>
 
         <!-- Modal Backdrop -->
         <div id="modal-backdrop"
