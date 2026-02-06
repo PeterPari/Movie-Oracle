@@ -166,34 +166,41 @@ function renderMovieGrid(container, movies) {
 }
 
 function displayResults(data) {
-    hideLoading();
-    if (dashboard) dashboard.classList.add('hidden');
-    searchResults.classList.remove('hidden');
+    // 1. Force bar to 100% for satisfaction
+    const progressEl = document.getElementById('loading-progress');
+    if (progressEl) progressEl.style.width = "100%";
 
-    // Show AI interpretation with animation
-    if (data.ai_interpretation) {
-        interpretationText.textContent = data.ai_interpretation;
-        aiInterpretation.classList.remove('hidden');
-    }
+    // 2. Small delay to let user see the 100%
+    setTimeout(() => {
+        hideLoading();
+        if (dashboard) dashboard.classList.add('hidden');
+        searchResults.classList.remove('hidden');
 
-    // Show summary
-    if (data.summary) {
-        summaryText.textContent = data.summary;
-        resultsSummary.classList.remove('hidden');
-    }
+        // Show AI interpretation with animation
+        if (data.ai_interpretation) {
+            interpretationText.textContent = data.ai_interpretation;
+            aiInterpretation.classList.remove('hidden');
+        }
 
-    // Render cards
-    if (!data.results || data.results.length === 0) {
-        emptyState.classList.remove('hidden');
-        resultsContainer.innerHTML = '';
-        return;
-    }
+        // Show summary
+        if (data.summary) {
+            summaryText.textContent = data.summary;
+            resultsSummary.classList.remove('hidden');
+        }
 
-    allMovies = [...allMovies, ...data.results];
+        // Render cards
+        if (!data.results || data.results.length === 0) {
+            emptyState.classList.remove('hidden');
+            resultsContainer.innerHTML = '';
+            return;
+        }
 
-    // Render with staggered animation
-    resultsContainer.innerHTML = data.results.map((movie, index) => createBigCard(movie, index + 1, index)).join('');
-    lucide.createIcons();
+        allMovies = [...allMovies, ...data.results];
+
+        // Render with staggered animation
+        resultsContainer.innerHTML = data.results.map((movie, index) => createBigCard(movie, index + 1, index)).join('');
+        lucide.createIcons();
+    }, 200);
 }
 
 function calculateOracleScore(movie) {
@@ -445,38 +452,46 @@ function closeModal() {
     document.body.style.overflow = 'auto';
 }
 
-// --- NEW LOADING LOGIC ---
+// --- UPDATED LOADING LOGIC ---
 let statusInterval;
 
-const loadingMessages = [
-    "Establishing Secure Link...",
-    "Contacting Movie API...",
-    "Parsing Search Query...",
-    "Scanning Database...",
-    "Cross-referencing Ratings...",
-    "Calculating ROI & Budget...",
-    "Finalizing Oracle Prediction..."
+// Pair messages with a specific "fake" percentage
+const loadingSteps = [
+    { text: "Establishing Secure Link...", percent: "15%" },
+    { text: "Contacting Movie API...", percent: "30%" },
+    { text: "Scanning Cinematic Multiverse...", percent: "45%" },
+    { text: "Cross-referencing Ratings...", percent: "60%" },
+    { text: "Calculating ROI & Budget...", percent: "80%" },
+    { text: "Finalizing Oracle Prediction...", percent: "95%" }
 ];
 
 function cycleStatusMessages() {
     const subtitleEl = document.getElementById('loading-subtitle');
-    if (!subtitleEl) return;
+    const progressEl = document.getElementById('loading-progress');
+
+    if (!subtitleEl || !progressEl) return;
 
     let index = 0;
 
-    // Reset to first message immediately
-    subtitleEl.textContent = loadingMessages[0];
-
-    // Make text Gold so it stands out more than the old grey
+    // Set initial state
+    subtitleEl.textContent = loadingSteps[0].text;
+    progressEl.style.width = loadingSteps[0].percent;
     subtitleEl.className = 'text-accent-gold/70 uppercase tracking-[0.2em] text-[10px] font-bold animate-pulse';
 
-    // Clear any existing interval to prevent speeding up
     if (statusInterval) clearInterval(statusInterval);
 
-    // Update message every 800ms
+    // Update every 800ms
     statusInterval = setInterval(() => {
-        index = (index + 1) % loadingMessages.length;
-        subtitleEl.textContent = loadingMessages[index];
+        index++;
+
+        // If we reach the end of the list, stop updating (stay at 95% until API finishes)
+        if (index >= loadingSteps.length) {
+            clearInterval(statusInterval);
+            return;
+        }
+
+        subtitleEl.textContent = loadingSteps[index].text;
+        progressEl.style.width = loadingSteps[index].percent;
     }, 800);
 }
 
