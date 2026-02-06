@@ -142,10 +142,18 @@ def search(request: SearchRequest):
         if filtered:
             formatted = filtered
 
+    # Ranking with timeout (don't let it slow down the response)
+    ranking = {"summary": "Here are your results:", "ranked_movies": []}
     try:
-        ranking = rank_and_explain(query, formatted)
-    except Exception:
-        ranking = {"summary": "Results found:", "ranked_movies": []}
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(rank_and_explain, query, formatted)
+            try:
+                ranking = future.result(timeout=8)  # 8-second timeout for ranking
+            except FuturesTimeoutError:
+                print("Ranking timed out, returning without scores")
+    except Exception as e:
+        print(f"Ranking error: {e}")
 
     # Merge ranking data (rank, explanation, SCORE)
     ranked_movies = ranking.get("ranked_movies", [])

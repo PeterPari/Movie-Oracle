@@ -208,7 +208,7 @@ def _call_gemini(system_prompt, user_prompt, temperature=0.3):
             response = _safe_generate_content(
                 model="gemini-2.0-flash-lite",
                 contents=combined_prompt,
-                config={"temperature": temperature, "max_output_tokens": 2000}
+                config={"temperature": temperature, "max_output_tokens": 1000}  # Reduced for speed
             )
         text_response = response.text
         db_cache.set(cache_key, text_response, ttl=86400)
