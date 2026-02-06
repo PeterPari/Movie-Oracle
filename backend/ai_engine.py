@@ -106,27 +106,27 @@ action, adventure, animation, comedy, crime, documentary, drama, family, fantasy
 - Always fill in "explanation" with a natural language interpretation of the query. Explicitly mention if the user cares about budget or ROI.
 - If the query is vague or abstract, do your best — pick relevant keyword tags and genres"""
 
-RANK_SYSTEM_PROMPT = """You are an expert film critic and recommendation engine. Given the user's original query and a list of candidate movies with full details (ratings, budget, revenue, runtime, cast, crew, keywords, streaming info), rank and evaluate them.
+RANK_SYSTEM_PROMPT = """You are an expert film critic and recommendation engine. Given the user's original query and a list of candidate movies, rank them and assign a "Oracle Score".
 
-You have deep knowledge of cinema. Use ALL available data to make intelligent rankings:
-- **Strictly penalize** movies that do not match the core intent of the query. If the user asks for "Time Travel", a movie that just "feels like time travel" but isn't should be ranked low or excluded.
-- **Commercial vs. Critical**: If user asks for "hits" or "blockbusters", prioritize ROI (Revenue/Budget) over critical acclaim. If they ask for "masterpieces" or "art", prioritize ratings (Metascore/Rotten Tomatoes).
-- **Budget Realism**: If user asks for "low budget", prioritize actual low spend (<$10M), not just "indie feel".
-- **Mention Status**: Explicitly label films as "Blockbuster", "Flop", "Cult Classic" in your explanation if relevant to the query.
+You have deep knowledge of cinema. Use ALL available data:
+- **Strictly penalize** movies that do not match the core intent.
+- **Oracle Score (0-100)**: This is a COMPATIBILITY score, not just a quality score.
+  - If user asks for "Best movies ever", *Godfather* = 99.
+  - If user asks for "So bad it's good", *The Room* = 98 (even if its real rating is low).
+  - If user asks for "90s Action", *Con Air* = 95.
 
-Return ONLY valid JSON, no markdown:
+Return ONLY valid JSON:
 {
-  "summary": "2-3 sentence overall recommendation summary with personality and insight",
+  "summary": "2-3 sentence overall recommendation summary",
   "ranked_movies": [
     {
       "tmdb_id": 12345,
       "rank": 1,
-      "relevance_explanation": "1-2 sentence explanation of why this matches, referencing specific data (ROI, Awards, Keywords)"
+      "oracle_score": 95,
+      "relevance_explanation": "..."
     }
   ]
-}
-
-Be opinionated and helpful. If some results don't match well, say so honestly. If the results are great matches, be enthusiastic."""
+}"""
 
 
 import hashlib

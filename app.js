@@ -24,6 +24,39 @@ const closeModalBtn = document.getElementById('close-modal');
 let allMovies = [];
 let hasTransitioned = false;
 
+const PROMPT_POOL = [
+    { icon: "ghost", text: "A24 Horror" },
+    { icon: "trending-up", text: "High ROI Sci-Fi" },
+    { icon: "history", text: "90s Thrillers" },
+    { icon: "rocket", text: "Space Operas" },
+    { icon: "skull", text: "Slasher Flops" },
+    { icon: "heart", text: "Indie Romance" },
+    { icon: "sword", text: "Epic Fantasy" },
+    { icon: "camera", text: "Found Footage" },
+    { icon: "brain", text: "Psychological Mindbenders" },
+    { icon: "laugh", text: "Dark Comedies" },
+    { icon: "zap", text: "Cyberpunk Cult Classics" }
+];
+
+function renderRandomExamples() {
+    const container = document.getElementById('examples');
+    if (!container) return;
+
+    // Shuffle and pick 3
+    const shuffled = [...PROMPT_POOL].sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, 3);
+
+    container.innerHTML = selected.map(p => `
+        <button class="example-btn px-5 py-2 rounded-full border border-white/5 bg-white/5 hover:bg-white/10 text-cream/40 hover:text-accent-gold text-[10px] tracking-[0.2em] uppercase transition-all flex items-center gap-2 group">
+            <i data-lucide="${p.icon}" class="w-3 h-3 text-accent-gold/50 group-hover:text-accent-gold transition-colors"></i>
+            ${p.text}
+        </button>
+    `).join('');
+
+    // Refresh icons since we just added new HTML
+    lucide.createIcons();
+}
+
 // Event listeners
 searchBtn.addEventListener('click', handleSearch);
 searchInput.addEventListener('keydown', (e) => {
@@ -45,6 +78,7 @@ modalBackdrop.addEventListener('click', (e) => {
 
 // Init
 document.addEventListener('DOMContentLoaded', () => {
+    renderRandomExamples();
     lucide.createIcons();
 });
 
@@ -166,11 +200,11 @@ function renderMovieGrid(container, movies) {
 }
 
 function displayResults(data) {
-    // 1. Force bar to 100% for satisfaction
+    // 1. Force progress bar to 100%
     const progressEl = document.getElementById('loading-progress');
     if (progressEl) progressEl.style.width = "100%";
 
-    // 2. Small delay to let user see the 100%
+    // 2. Wait 500ms before showing results so the animation plays
     setTimeout(() => {
         hideLoading();
         if (dashboard) dashboard.classList.add('hidden');
@@ -200,56 +234,80 @@ function displayResults(data) {
         // Render with staggered animation
         resultsContainer.innerHTML = data.results.map((movie, index) => createBigCard(movie, index + 1, index)).join('');
         lucide.createIcons();
-    }, 200);
+    }, 500); // End Timeout
 }
 
 function calculateOracleScore(movie) {
-    let components = [];
+    // 1. TRUST THE AI (Context-Aware Score)
+    // If the AI gave us a specific score for this search, use it immediately.
+    if (movie.oracle_score !== undefined && movie.oracle_score !== null) {
+        return movie.oracle_score;
+    }
 
-    // 1. Ratings normalization (0-100)
-    if (movie.imdb_rating && movie.imdb_rating !== 'N/A') {
-        const val = parseFloat(movie.imdb_rating);
-        if (!isNaN(val)) components.push(val * 10);
-    }
-    if (movie.rotten_tomatoes && movie.rotten_tomatoes !== 'N/A') {
-        const val = parseInt(movie.rotten_tomatoes);
-        if (!isNaN(val)) components.push(val);
-    }
+    // 2. SMARTER FALLBACK (Statistical Score)
+    // Used for "Trending" or "Discover" pages where AI hasn't run.
+
+    let scoreSum = 0;
+    let weightSum = 0;
+
+    // Metacritic (High Authority) - Weight: 3.0
     if (movie.metascore && movie.metascore !== 'N/A') {
         const val = parseInt(movie.metascore);
-        if (!isNaN(val)) components.push(val);
+        if (!isNaN(val)) {
+            scoreSum += val * 3;
+            weightSum += 3;
+        }
     }
+
+    // Rotten Tomatoes (Consensus) - Weight: 2.5
+    if (movie.rotten_tomatoes && movie.rotten_tomatoes !== 'N/A') {
+        const val = parseInt(movie.rotten_tomatoes);
+        if (!isNaN(val)) {
+            scoreSum += val * 2.5;
+            weightSum += 2.5;
+        }
+    }
+
+    // IMDb (Audience) - Weight: 2.0
+    if (movie.imdb_rating && movie.imdb_rating !== 'N/A') {
+        const val = parseFloat(movie.imdb_rating);
+        if (!isNaN(val)) {
+            scoreSum += (val * 10) * 2.0;
+            weightSum += 2.0;
+        }
+    }
+
+    // TMDb (Data Source) - Weight: 1.0
     if (movie.tmdb_rating) {
-        components.push(movie.tmdb_rating * 10);
+        scoreSum += (movie.tmdb_rating * 10) * 1.0;
+        weightSum += 1.0;
     }
 
-    if (components.length === 0) return null;
+    if (weightSum === 0) return null;
 
-    let baseScore = components.reduce((a, b) => a + b, 0) / components.length;
+    let finalScore = scoreSum / weightSum;
 
-    // 2. Financial Modifiers
-    let modifier = 0;
+    // 3. THE "CULT CLASSIC" BONUS
+    // If Audience (IMDb) loves it much more than Critics (Metascore), boost it.
+    // This fixes the "Venom" or "Mario Movie" problem.
+    if (movie.imdb_rating && movie.metascore && movie.metascore !== 'N/A') {
+        const imdbVal = parseFloat(movie.imdb_rating) * 10;
+        const metaVal = parseInt(movie.metascore);
 
-    // ROI Modifier
-    if (movie.roi && movie.roi !== 'N/A') {
-        const roiVal = parseFloat(movie.roi);
-        if (!isNaN(roiVal)) {
-            if (roiVal >= 4) modifier += 5;
-            else if (roiVal >= 2.5) modifier += 2;
-            else if (roiVal < 1) modifier -= 5;
+        if (imdbVal > metaVal + 15) {
+            // Audience likes it 15% more than critics -> Add ~5 points
+            finalScore += 5;
         }
     }
 
-    // Revenue Modifier (Manual string parsing for currency)
-    if (movie.revenue && movie.revenue !== 'N/A') {
+    // 4. BLOCKBUSTER BONUS
+    // If it made over $1B, it has cultural impact regardless of reviews.
+    if (movie.revenue && typeof movie.revenue === 'string') {
         const revVal = parseInt(movie.revenue.replace(/[^0-9]/g, ''));
-        if (!isNaN(revVal)) {
-            if (revVal >= 1000000000) modifier += 5;
-            else if (revVal >= 500000000) modifier += 2;
-        }
+        if (revVal >= 1000000000) finalScore += 3;
     }
 
-    return Math.min(100, Math.max(0, Math.round(baseScore + modifier)));
+    return Math.min(100, Math.round(finalScore));
 }
 
 
@@ -452,46 +510,47 @@ function closeModal() {
     document.body.style.overflow = 'auto';
 }
 
-// --- UPDATED LOADING LOGIC ---
+// --- NEW LOADING LOGIC ---
 let statusInterval;
 
-// Pair messages with a specific "fake" percentage
+// Pair messages with percentages
 const loadingSteps = [
     { text: "Establishing Secure Link...", percent: "15%" },
     { text: "Contacting Movie API...", percent: "30%" },
-    { text: "Scanning Cinematic Multiverse...", percent: "45%" },
-    { text: "Cross-referencing Ratings...", percent: "60%" },
-    { text: "Calculating ROI & Budget...", percent: "80%" },
+    { text: "Parsing Search Query...", percent: "45%" },
+    { text: "Scanning Cinematic Multiverse...", percent: "60%" },
+    { text: "Cross-referencing Ratings...", percent: "75%" },
+    { text: "Calculating ROI & Budget...", percent: "85%" },
     { text: "Finalizing Oracle Prediction...", percent: "95%" }
 ];
 
 function cycleStatusMessages() {
     const subtitleEl = document.getElementById('loading-subtitle');
-    const progressEl = document.getElementById('loading-progress');
-
+    const progressEl = document.getElementById('loading-progress'); // Get the bar
     if (!subtitleEl || !progressEl) return;
 
     let index = 0;
 
-    // Set initial state
+    // Initial State
     subtitleEl.textContent = loadingSteps[0].text;
-    progressEl.style.width = loadingSteps[0].percent;
+    progressEl.style.width = loadingSteps[0].percent; // Set initial width
+
+    // Style the text
     subtitleEl.className = 'text-accent-gold/70 uppercase tracking-[0.2em] text-[10px] font-bold animate-pulse';
 
     if (statusInterval) clearInterval(statusInterval);
 
-    // Update every 800ms
     statusInterval = setInterval(() => {
         index++;
 
-        // If we reach the end of the list, stop updating (stay at 95% until API finishes)
+        // Stop incrementing if we reach the end (don't loop back to 0%)
         if (index >= loadingSteps.length) {
             clearInterval(statusInterval);
             return;
         }
 
         subtitleEl.textContent = loadingSteps[index].text;
-        progressEl.style.width = loadingSteps[index].percent;
+        progressEl.style.width = loadingSteps[index].percent; // Update width
     }, 800);
 }
 

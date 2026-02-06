@@ -367,119 +367,102 @@
                 <!-- Example Chips -->
                 <div id="examples" class="mt-8 flex flex-wrap justify-center gap-4 opacity-0"
                     style="animation: heroFadeIn 1.5s ease-out 0.8s forwards; max-height: 100px; overflow: visible;">
-                    <button
-                        class="example-btn px-5 py-2 rounded-full border border-white/5 bg-white/5 hover:bg-white/10 text-cream/40 hover:text-accent-gold text-[10px] tracking-[0.2em] uppercase transition-all flex items-center gap-2 group">
-                        <i data-lucide="ghost"
-                            class="w-3 h-3 text-accent-gold/50 group-hover:text-accent-gold transition-colors"></i>
-                        A24 Horror
-                    </button>
-                    <button
-                        class="example-btn px-5 py-2 rounded-full border border-white/5 bg-white/5 hover:bg-white/10 text-cream/40 hover:text-accent-gold text-[10px] tracking-[0.2em] uppercase transition-all flex items-center gap-2 group">
-                        <i data-lucide="trending-up"
-                            class="w-3 h-3 text-accent-gold/50 group-hover:text-accent-gold transition-colors"></i>
-                        High ROI Sci-Fi
-                    </button>
-                    <button
-                        class="example-btn px-5 py-2 rounded-full border border-white/5 bg-white/5 hover:bg-white/10 text-cream/40 hover:text-accent-gold text-[10px] tracking-[0.2em] uppercase transition-all flex items-center gap-2 group">
-                        <i data-lucide="history"
-                            class="w-3 h-3 text-accent-gold/50 group-hover:text-accent-gold transition-colors"></i>
-                        90s Thrillers
-                    </button>
                 </div>
+
+                <main class="w-full max-w-7xl mx-auto px-6 space-y-12">
+                    <!-- Loading State -->
+                    <div id="loading" class="hidden py-16 text-center">
+                        <div class="relative inline-block mb-8">
+                            <!-- Outer ring -->
+                            <div class="w-20 h-20 rounded-full border border-accent-gold/10 orb-ring"></div>
+                            <!-- Inner spinning ring -->
+                            <div class="absolute inset-1 rounded-full border-2 border-accent-gold/20 border-t-accent-gold orb-ring"
+                                style="animation-duration: 1.5s; animation-direction: reverse;"></div>
+                            <!-- Center orb -->
+                            <div
+                                class="absolute inset-3 rounded-full bg-gradient-to-br from-accent-gold/20 to-transparent orb-pulse flex items-center justify-center">
+                                <i data-lucide="sparkles" class="w-6 h-6 text-accent-gold"></i>
+                            </div>
+                        </div>
+                        <h3 id="loading-title" class="text-2xl font-prestige text-cream mb-3"></h3>
+                        <p id="loading-subtitle" class="text-cream/30 uppercase tracking-[0.2em] text-[10px]"></p>
+
+                        <div class="w-64 h-1 bg-white/10 rounded-full mx-auto mt-8 overflow-hidden">
+                            <div id="loading-progress"
+                                class="h-full bg-accent-gold w-0 transition-all duration-700 ease-out"></div>
+                        </div>
+                    </div>
+
+                    <!-- Search Results -->
+                    <div id="search-results" class="hidden space-y-12 pb-24">
+                        <div id="ai-interpretation"
+                            class="glass-panel rounded-2xl p-8 border-accent-gold/10 max-w-3xl mx-auto interpretation-animate">
+                            <div class="flex items-start gap-6">
+                                <div class="bg-accent-gold/10 rounded-lg p-3">
+                                    <i data-lucide="brain-circuit" class="w-6 h-6 text-accent-gold"></i>
+                                </div>
+                                <div>
+                                    <span
+                                        class="text-[9px] uppercase tracking-[0.3em] text-accent-gold font-bold mb-3 block">Perspective</span>
+                                    <p id="interpretation-text"
+                                        class="text-cream/80 font-medium leading-relaxed serif italic text-lg"></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="results-summary" class="text-center max-w-2xl mx-auto interpretation-animate"
+                            style="animation-delay: 0.15s;">
+                            <p id="summary-text" class="text-cream/40 serif italic"></p>
+                        </div>
+
+                        <div id="results-container" class="grid grid-cols-1 md:grid-cols-2 gap-12 max-w-6xl mx-auto">
+                        </div>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div id="empty-state" class="hidden text-center py-24">
+                        <div class="bg-white/5 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <i data-lucide="ghost" class="w-10 h-10 text-cream/20"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold text-white mb-2 font-prestige">No matches found</h3>
+                        <p class="text-cream/40 serif italic">The Oracle finds no record of this in our current
+                            archives.
+                        </p>
+                        <button onclick="window.location.reload()"
+                            class="mt-8 text-accent-gold font-bold hover:underline underline-offset-8 uppercase text-[10px] tracking-widest">Return
+                            Home</button>
+                    </div>
+
+                    <!-- Error State -->
+                    <div id="error-state" class="hidden text-center py-12">
+                        <p class="text-red-400 font-bold serif italic" id="error-message"></p>
+                    </div>
+                </main>
             </div>
 
-            <main class="w-full max-w-7xl mx-auto px-6 space-y-12">
-                <!-- Loading State -->
-                <div id="loading" class="hidden py-16 text-center">
-                    <div class="relative inline-block mb-8">
-                        <!-- Outer ring -->
-                        <div class="w-20 h-20 rounded-full border border-accent-gold/10 orb-ring"></div>
-                        <!-- Inner spinning ring -->
-                        <div class="absolute inset-1 rounded-full border-2 border-accent-gold/20 border-t-accent-gold orb-ring"
-                            style="animation-duration: 1.5s; animation-direction: reverse;"></div>
-                        <!-- Center orb -->
-                        <div
-                            class="absolute inset-3 rounded-full bg-gradient-to-br from-accent-gold/20 to-transparent orb-pulse flex items-center justify-center">
-                            <i data-lucide="sparkles" class="w-6 h-6 text-accent-gold"></i>
-                        </div>
-                    </div>
-                    <h3 id="loading-title" class="text-2xl font-prestige text-cream mb-3"></h3>
-                    <p id="loading-subtitle" class="text-cream/30 uppercase tracking-[0.2em] text-[10px]"></p>
-
-                    <div class="w-64 h-1 bg-white/10 rounded-full mx-auto mt-8 overflow-hidden">
-                        <div id="loading-progress"
-                            class="h-full bg-accent-gold w-0 transition-all duration-700 ease-out"></div>
-                    </div>
-                </div>
-
-                <!-- Search Results -->
-                <div id="search-results" class="hidden space-y-12 pb-24">
-                    <div id="ai-interpretation"
-                        class="glass-panel rounded-2xl p-8 border-accent-gold/10 max-w-3xl mx-auto interpretation-animate">
-                        <div class="flex items-start gap-6">
-                            <div class="bg-accent-gold/10 rounded-lg p-3">
-                                <i data-lucide="brain-circuit" class="w-6 h-6 text-accent-gold"></i>
-                            </div>
-                            <div>
-                                <span
-                                    class="text-[9px] uppercase tracking-[0.3em] text-accent-gold font-bold mb-3 block">Perspective</span>
-                                <p id="interpretation-text"
-                                    class="text-cream/80 font-medium leading-relaxed serif italic text-lg"></p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="results-summary" class="text-center max-w-2xl mx-auto interpretation-animate"
-                        style="animation-delay: 0.15s;">
-                        <p id="summary-text" class="text-cream/40 serif italic"></p>
-                    </div>
-
-                    <div id="results-container" class="grid grid-cols-1 md:grid-cols-2 gap-12 max-w-6xl mx-auto"></div>
-                </div>
-
-                <!-- Empty State -->
-                <div id="empty-state" class="hidden text-center py-24">
-                    <div class="bg-white/5 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <i data-lucide="ghost" class="w-10 h-10 text-cream/20"></i>
-                    </div>
-                    <h3 class="text-2xl font-bold text-white mb-2 font-prestige">No matches found</h3>
-                    <p class="text-cream/40 serif italic">The Oracle finds no record of this in our current archives.
-                    </p>
-                    <button onclick="window.location.reload()"
-                        class="mt-8 text-accent-gold font-bold hover:underline underline-offset-8 uppercase text-[10px] tracking-widest">Return
-                        Home</button>
-                </div>
-
-                <!-- Error State -->
-                <div id="error-state" class="hidden text-center py-12">
-                    <p class="text-red-400 font-bold serif italic" id="error-message"></p>
-                </div>
-            </main>
+            <footer class="w-full py-12 flex justify-center items-center gap-8 z-10 opacity-30 mt-auto">
+                <a href="/"
+                    class="text-[9px] uppercase tracking-[0.3em] font-bold text-cream hover:text-accent-gold transition-colors">Oracle</a>
+                <span class="w-1 h-1 bg-white/10 rounded-full"></span>
+                <a href="/discover"
+                    class="text-[9px] uppercase tracking-[0.3em] font-bold text-cream hover:text-accent-gold transition-colors">Discover</a>
+            </footer>
         </div>
 
-        <footer class="w-full py-12 flex justify-center items-center gap-8 z-10 opacity-30 mt-auto">
-            <a href="/"
-                class="text-[9px] uppercase tracking-[0.3em] font-bold text-cream hover:text-accent-gold transition-colors">Oracle</a>
-            <span class="w-1 h-1 bg-white/10 rounded-full"></span>
-            <a href="/discover"
-                class="text-[9px] uppercase tracking-[0.3em] font-bold text-cream hover:text-accent-gold transition-colors">Discover</a>
-        </footer>
-    </div>
-
-    <!-- Modal Backdrop -->
-    <div id="modal-backdrop"
-        class="fixed inset-0 bg-black/95 backdrop-blur-md z-[100] hidden flex items-center justify-center p-4">
-        <div id="movie-modal"
-            class="w-full max-w-6xl rounded-none overflow-hidden relative max-h-[92vh] flex flex-col border border-white/5 bg-bg-deep">
-            <button id="close-modal"
-                class="absolute top-8 right-8 z-20 bg-black/40 hover:bg-white/10 text-white rounded-full p-3 transition-all">
-                <i data-lucide="x" class="w-6 h-6"></i>
-            </button>
-            <div id="modal-content" class="overflow-y-auto custom-scrollbar"></div>
+        <!-- Modal Backdrop -->
+        <div id="modal-backdrop"
+            class="fixed inset-0 bg-black/95 backdrop-blur-md z-[100] hidden flex items-center justify-center p-4">
+            <div id="movie-modal"
+                class="w-full max-w-6xl rounded-none overflow-hidden relative max-h-[92vh] flex flex-col border border-white/5 bg-bg-deep">
+                <button id="close-modal"
+                    class="absolute top-8 right-8 z-20 bg-black/40 hover:bg-white/10 text-white rounded-full p-3 transition-all">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+                <div id="modal-content" class="overflow-y-auto custom-scrollbar"></div>
+            </div>
         </div>
-    </div>
 
-    <script src="./app.js"></script>
+        <script src="./app.js"></script>
 </body>
 
 </html>
