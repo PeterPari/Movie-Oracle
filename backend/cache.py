@@ -55,5 +55,13 @@ class SQLiteCache:
         except Exception as e:
             print(f"Cache Set Error: {e}")
 
+    def clear_prefix(self, prefix: str):
+        """Delete all cache entries whose key starts with the given prefix."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("DELETE FROM cache WHERE key LIKE ?", (f"{prefix}%",))
+        except Exception as e:
+            print(f"Cache Clear Error: {e}")
+
 # Global instance
 db_cache = SQLiteCache()

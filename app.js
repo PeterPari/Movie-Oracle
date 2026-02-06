@@ -140,7 +140,7 @@ async function performSearch(query, attempt = 0) {
 
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout per request
+        const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout per request
 
         const response = await fetch(`${API_BASE_URL}/api/search`, {
             method: 'POST',

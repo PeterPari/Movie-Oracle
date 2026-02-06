@@ -16,7 +16,11 @@ from backend.movie_api import (
     get_movies_by_genre, get_movies_by_company, get_movie_details
 )
 
-app = FastAPI(title="Movie Oracle", version="2.0.0")
+app = FastAPI(title="Movie Oracle", version="2.1.0")
+
+# Clear stale Gemini cache on startup (model was upgraded)
+from backend.cache import db_cache as _cache
+_cache.clear_prefix("gemini:")
 
 app.add_middleware(
     CORSMiddleware,
@@ -149,7 +153,7 @@ def search(request: SearchRequest):
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(rank_and_explain, query, formatted)
             try:
-                ranking = future.result(timeout=8)  # 8-second timeout for ranking
+                ranking = future.result(timeout=12)  # 12-second timeout for ranking
             except FuturesTimeoutError:
                 print("Ranking timed out, returning without scores")
     except Exception as e:
