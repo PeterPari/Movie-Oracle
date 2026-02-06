@@ -3,6 +3,11 @@ const modalBackdrop = document.getElementById('modal-backdrop');
 const modalContent = document.getElementById('modal-content');
 const closeModalBtn = document.getElementById('close-modal');
 
+// API Configuration - use Render backend for GitHub Pages
+const API_BASE_URL = window.location.hostname.includes('github.io')
+    ? 'https://movie-oracle.onrender.com'
+    : '';
+
 // State
 let allMovies = [];
 let coldStartNotificationTimeout = null;
@@ -88,7 +93,7 @@ modalBackdrop.addEventListener('click', (e) => {
 
 async function loadDiscoverContent() {
     try {
-        const data = await fetchWithRetry('/api/discover');
+        const data = await fetchWithRetry(`${API_BASE_URL}/api/discover`);
 
         renderMovieGrid('trending-grid', data.trending);
         renderMovieGrid('now-playing-grid', data.now_playing);
@@ -151,7 +156,7 @@ async function loadGenreMovies(genreId, genreName) {
     trendingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     try {
-        const response = await fetch(`/api/genre/${genreId}`);
+        const response = await fetch(`${API_BASE_URL}/api/genre/${genreId}`);
         if (!response.ok) throw new Error('Failed to fetch genre movies');
 
         const data = await response.json();
@@ -177,7 +182,7 @@ async function loadStudioMovies(companyId, companyName) {
     trendingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     try {
-        const response = await fetch(`/api/company/${companyId}`);
+        const response = await fetch(`${API_BASE_URL}/api/company/${companyId}`);
         if (!response.ok) throw new Error('Failed to fetch studio movies');
 
         const data = await response.json();

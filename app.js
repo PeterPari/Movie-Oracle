@@ -20,6 +20,11 @@ const modalBackdrop = document.getElementById('modal-backdrop');
 const modalContent = document.getElementById('modal-content');
 const closeModalBtn = document.getElementById('close-modal');
 
+// API Configuration - use Render backend for GitHub Pages, relative paths for Netlify
+const API_BASE_URL = window.location.hostname.includes('github.io')
+    ? 'https://movie-oracle.onrender.com'
+    : '';
+
 // State
 let allMovies = [];
 
@@ -137,7 +142,7 @@ async function performSearch(query, attempt = 0) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout per request
 
-        const response = await fetch('/api/search', {
+        const response = await fetch(`${API_BASE_URL}/api/search`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ query }),
@@ -294,7 +299,7 @@ async function openModal(id) {
     document.body.style.overflow = 'hidden';
 
     try {
-        const response = await fetch(`/api/details/${id}`);
+        const response = await fetch(`${API_BASE_URL}/api/details/${id}`);
         if (response.ok) movie = await response.json();
     } catch (err) { console.error(err); }
 
