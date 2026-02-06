@@ -99,6 +99,7 @@ function animateOracleText() {
 
 // ===== COLD START DETECTION =====
 let backendReady = false;
+let coldStartNotificationTimeout = null;
 
 function showColdStartNotification() {
     let notification = document.getElementById('cold-start-notification');
@@ -109,8 +110,8 @@ function showColdStartNotification() {
         notification.innerHTML = `
             <div class="w-5 h-5 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin"></div>
             <div>
-                <p class="text-cream font-bold text-sm">Starting Render, please wait</p>
-                <p class="text-cream/50 text-xs">(Can take up to 90 seconds)</p>
+                <p class="text-cream font-bold text-sm">Server is waking up...</p>
+                <p class="text-cream/50 text-xs">This may take up to 60 seconds</p>
             </div>
         `;
         document.body.appendChild(notification);
@@ -119,42 +120,62 @@ function showColdStartNotification() {
 }
 
 function hideColdStartNotification() {
+    if (coldStartNotificationTimeout) {
+        clearTimeout(coldStartNotificationTimeout);
+        coldStartNotificationTimeout = null;
+    }
     const notification = document.getElementById('cold-start-notification');
     if (notification) notification.classList.add('hidden');
 }
 
-async function ensureBackendReady() {
-    if (backendReady) return true;
-
-    showColdStartNotification();
-
-    const maxAttempts = 30; // 30 attempts * 3 seconds = 90 seconds max
+// Fast search with automatic cold-start retry
+async function performSearch(query, attempt = 0) {
+    const maxAttempts = 20; // 20 attempts * 3 seconds = 60 seconds max
     const retryDelay = 3000;
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout per request
 
-            const response = await fetch('/api/health', { signal: controller.signal });
-            clearTimeout(timeoutId);
+        const response = await fetch('/api/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query }),
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
 
-            if (response.ok) {
-                backendReady = true;
-                hideColdStartNotification();
-                return true;
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ detail: 'Search failed' }));
+            throw new Error(err.detail || `Request failed (${response.status})`);
+        }
+
+        backendReady = true;
+        hideColdStartNotification();
+        return await response.json();
+
+    } catch (error) {
+        // Check if it's a network/timeout error that suggests cold start
+        const isColdStartError = error.name === 'AbortError' ||
+            error.message.includes('Failed to fetch') ||
+            error.message.includes('NetworkError');
+
+        if (isColdStartError && attempt < maxAttempts) {
+            // Show cold-start notification only after first failure (delayed)
+            if (attempt === 0) {
+                coldStartNotificationTimeout = setTimeout(() => {
+                    showColdStartNotification();
+                }, 2000); // Show after 2s if still retrying
             }
-        } catch (e) {
-            // Backend not ready yet, continue retrying
-        }
 
-        if (attempt < maxAttempts - 1) {
+            // Wait and retry
             await new Promise(resolve => setTimeout(resolve, retryDelay));
+            return performSearch(query, attempt + 1);
         }
-    }
 
-    hideColdStartNotification();
-    return false;
+        // Real error, not cold start
+        throw error;
+    }
 }
 
 async function handleSearch(retryQuery = null) {
@@ -167,30 +188,14 @@ async function handleSearch(retryQuery = null) {
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    // Check if backend is ready (handles cold start)
-    const ready = await ensureBackendReady();
-    if (!ready) {
-        showError('Backend is taking too long to start. Please try again.', query);
-        return;
-    }
-
+    // Show loading animation IMMEDIATELY
     showLoading();
 
     try {
-        const response = await fetch('/api/search', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query }),
-        });
-
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({ detail: 'Search failed' }));
-            throw new Error(err.detail || `Request failed (${response.status})`);
-        }
-
-        const data = await response.json();
+        const data = await performSearch(query);
         displayResults(data);
     } catch (error) {
+        hideColdStartNotification();
         showError(error.message, query);
     }
 }

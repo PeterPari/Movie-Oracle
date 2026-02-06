@@ -5,9 +5,9 @@ const closeModalBtn = document.getElementById('close-modal');
 
 // State
 let allMovies = [];
-let backendReady = false;
+let coldStartNotificationTimeout = null;
 
-// ===== COLD START DETECTION =====
+// ===== COLD START DETECTION (FAST) =====
 function showColdStartNotification() {
     let notification = document.getElementById('cold-start-notification');
     if (!notification) {
@@ -17,8 +17,8 @@ function showColdStartNotification() {
         notification.innerHTML = `
             <div class="w-5 h-5 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin"></div>
             <div>
-                <p class="text-cream font-bold text-sm">Starting Render, please wait</p>
-                <p class="text-cream/50 text-xs">(Can take up to 90 seconds)</p>
+                <p class="text-cream font-bold text-sm">Server is waking up...</p>
+                <p class="text-cream/50 text-xs">This may take up to 60 seconds</p>
             </div>
         `;
         document.body.appendChild(notification);
@@ -27,42 +27,49 @@ function showColdStartNotification() {
 }
 
 function hideColdStartNotification() {
+    if (coldStartNotificationTimeout) {
+        clearTimeout(coldStartNotificationTimeout);
+        coldStartNotificationTimeout = null;
+    }
     const notification = document.getElementById('cold-start-notification');
     if (notification) notification.classList.add('hidden');
 }
 
-async function ensureBackendReady() {
-    if (backendReady) return true;
-
-    showColdStartNotification();
-
-    const maxAttempts = 30;
+// Fast API fetch with automatic cold-start retry
+async function fetchWithRetry(url, options = {}, attempt = 0) {
+    const maxAttempts = 20;
     const retryDelay = 3000;
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-            const response = await fetch('/api/health', { signal: controller.signal });
-            clearTimeout(timeoutId);
+        const response = await fetch(url, { ...options, signal: controller.signal });
+        clearTimeout(timeoutId);
 
-            if (response.ok) {
-                backendReady = true;
-                hideColdStartNotification();
-                return true;
+        if (!response.ok) throw new Error(`Request failed (${response.status})`);
+
+        hideColdStartNotification();
+        return await response.json();
+
+    } catch (error) {
+        const isColdStartError = error.name === 'AbortError' ||
+            error.message.includes('Failed to fetch') ||
+            error.message.includes('NetworkError');
+
+        if (isColdStartError && attempt < maxAttempts) {
+            if (attempt === 0) {
+                coldStartNotificationTimeout = setTimeout(() => {
+                    showColdStartNotification();
+                }, 2000);
             }
-        } catch (e) {
-            // Backend not ready yet
-        }
 
-        if (attempt < maxAttempts - 1) {
             await new Promise(resolve => setTimeout(resolve, retryDelay));
+            return fetchWithRetry(url, options, attempt + 1);
         }
-    }
 
-    hideColdStartNotification();
-    return false;
+        throw error;
+    }
 }
 
 // Init
@@ -80,21 +87,8 @@ modalBackdrop.addEventListener('click', (e) => {
 });
 
 async function loadDiscoverContent() {
-    // Wait for backend to be ready
-    const ready = await ensureBackendReady();
-    if (!ready) {
-        ['trending-grid', 'now-playing-grid', 'top-rated-grid', 'upcoming-grid'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.innerHTML = `<p class="col-span-full text-cream/40 text-center py-8">Backend unavailable. Please refresh.</p>`;
-        });
-        return;
-    }
-
     try {
-        const response = await fetch('/api/discover');
-        if (!response.ok) throw new Error('Failed to fetch discover data');
-
-        const data = await response.json();
+        const data = await fetchWithRetry('/api/discover');
 
         renderMovieGrid('trending-grid', data.trending);
         renderMovieGrid('now-playing-grid', data.now_playing);
@@ -111,6 +105,7 @@ async function loadDiscoverContent() {
 
     } catch (error) {
         console.error('Error loading discover content:', error);
+        hideColdStartNotification();
         ['trending-grid', 'now-playing-grid', 'top-rated-grid', 'upcoming-grid'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = `<p class="col-span-full text-cream/40 text-center py-8">Failed to load movies.</p>`;
