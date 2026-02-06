@@ -22,7 +22,6 @@ const closeModalBtn = document.getElementById('close-modal');
 
 // State
 let allMovies = [];
-let hasTransitioned = false;
 
 // Config: Curated Prompt Pool
 const EXAMPLE_PROMPTS = [
@@ -38,32 +37,9 @@ const EXAMPLE_PROMPTS = [
     { icon: 'brain-circuit', text: 'Mind Bending' }
 ];
 
-// Event listeners
-searchBtn.addEventListener('click', () => handleSearch());
-searchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') handleSearch();
-});
-
-examples.addEventListener('click', (e) => {
-    const btn = e.target.closest('.example-btn');
-    if (btn) {
-        searchInput.value = btn.textContent.trim();
-        handleSearch();
-    }
-});
-
-closeModalBtn.addEventListener('click', closeModal);
-modalBackdrop.addEventListener('click', (e) => {
-    if (e.target === modalBackdrop) closeModal();
-});
-
-// Init
-document.addEventListener('DOMContentLoaded', () => {
-    lucide.createIcons();
-    renderRandomExamples();
-});
-
 function renderRandomExamples() {
+    if (!examples) return;
+
     // Shuffle and pick 3
     const shuffled = [...EXAMPLE_PROMPTS].sort(() => 0.5 - Math.random());
     const selected = shuffled.slice(0, 3);
@@ -74,44 +50,36 @@ function renderRandomExamples() {
             ${ex.text}
         </button>
     `).join('');
+
     lucide.createIcons();
 }
 
-// ===== SMOOTH SLIDE-TO-TOP TRANSITION =====
-function transitionToResults() {
-    if (hasTransitioned) return;
-    hasTransitioned = true;
+// Event listeners
+searchBtn.addEventListener('click', () => handleSearch());
+searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleSearch();
+});
 
-    const searchRect = searchContainer.getBoundingClientRect();
-    const startTop = searchRect.top;
-
-    if (heroText) {
-        heroText.style.opacity = '0';
-        heroText.style.maxHeight = '0';
-        heroText.style.marginBottom = '0';
-        heroText.style.overflow = 'hidden';
-    }
-    if (examples) {
-        examples.style.opacity = '0';
-        examples.style.maxHeight = '0';
-        examples.style.margin = '0';
-    }
-
-    document.body.classList.add('results-mode');
-    const endTop = searchContainer.getBoundingClientRect().top;
-    const deltaY = startTop - endTop;
-
-    contentCenter.style.transition = 'none';
-    contentCenter.style.transform = `translateY(${deltaY}px)`;
-    contentCenter.offsetHeight; // Force reflow
-
-    contentCenter.style.transition = 'transform 1.1s cubic-bezier(0.19, 1, 0.22, 1)';
-    contentCenter.style.transform = 'translateY(0)';
-
-    setTimeout(() => {
-        contentCenter.style.transition = '';
-    }, 1200);
+if (examples) {
+    examples.addEventListener('click', (e) => {
+        const btn = e.target.closest('.example-btn');
+        if (btn) {
+            searchInput.value = btn.textContent.trim();
+            handleSearch();
+        }
+    });
 }
+
+closeModalBtn.addEventListener('click', closeModal);
+modalBackdrop.addEventListener('click', (e) => {
+    if (e.target === modalBackdrop) closeModal();
+});
+
+// Init
+document.addEventListener('DOMContentLoaded', () => {
+    renderRandomExamples();
+    lucide.createIcons();
+});
 
 // ===== LETTER-BY-LETTER ORACLE ANIMATION =====
 function animateOracleText() {
@@ -130,7 +98,6 @@ function animateOracleText() {
 }
 
 async function handleSearch(retryQuery = null) {
-    // If retryQuery is provided, set it (fixes Retry UX)
     if (retryQuery) {
         searchInput.value = retryQuery;
     }
@@ -138,7 +105,6 @@ async function handleSearch(retryQuery = null) {
     const query = searchInput.value.trim();
     if (!query) return;
 
-    transitionToResults();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     showLoading();
 
@@ -161,59 +127,7 @@ async function handleSearch(retryQuery = null) {
     }
 }
 
-// --- UPDATED LOADING LOGIC ---
-let statusInterval;
-const loadingSteps = [
-    { text: "Establishing Secure Link...", percent: "15%" },
-    { text: "Contacting Movie API...", percent: "30%" },
-    { text: "Scanning Cinematic Multiverse...", percent: "45%" },
-    { text: "Cross-referencing Ratings...", percent: "60%" },
-    { text: "Calculating ROI & Budget...", percent: "75%" },
-    { text: "Finalizing Oracle Prediction...", percent: "90%" }
-];
-
-function cycleStatusMessages() {
-    const subtitleEl = document.getElementById('loading-subtitle');
-    const progressEl = document.getElementById('loading-progress');
-    if (!subtitleEl || !progressEl) return;
-
-    let index = 0;
-    // Reset
-    subtitleEl.textContent = loadingSteps[0].text;
-    progressEl.style.width = loadingSteps[0].percent;
-    subtitleEl.className = 'text-accent-gold/70 uppercase tracking-[0.2em] text-[10px] font-bold animate-pulse';
-
-    if (statusInterval) clearInterval(statusInterval);
-
-    statusInterval = setInterval(() => {
-        index++;
-        if (index >= loadingSteps.length) {
-            clearInterval(statusInterval);
-            return;
-        }
-        subtitleEl.textContent = loadingSteps[index].text;
-        progressEl.style.width = loadingSteps[index].percent;
-    }, 800);
-}
-
-function showLoading() {
-    loading.classList.remove('hidden');
-    if (dashboard) dashboard.classList.add('hidden');
-    searchResults.classList.add('hidden');
-    emptyState.classList.add('hidden');
-    errorState.classList.add('hidden');
-    animateOracleText();
-    cycleStatusMessages();
-    lucide.createIcons();
-}
-
-function hideLoading() {
-    loading.classList.add('hidden');
-    if (statusInterval) clearInterval(statusInterval);
-}
-
 function displayResults(data) {
-    // Smooth finish to 100%
     const progressEl = document.getElementById('loading-progress');
     if (progressEl) progressEl.style.width = "100%";
 
@@ -237,57 +151,75 @@ function displayResults(data) {
             return;
         }
 
-        allMovies = [...allMovies, ...data.results];
+        allMovies = [...data.results];
         resultsContainer.innerHTML = data.results.map((movie, index) => createBigCard(movie, index + 1, index)).join('');
         lucide.createIcons();
-    }, 300); // Wait for bar to fill
+    }, 500);
 }
 
 function calculateOracleScore(movie) {
-    // 1. SMART ORACLE SCORE (AI-driven)
-    if (movie.ai_score !== undefined && movie.ai_score !== null) {
-        return movie.ai_score;
+    // 1. TRUST THE AI (Context-Aware Score)
+    if (movie.oracle_score !== undefined && movie.oracle_score !== null) {
+        return movie.oracle_score;
     }
 
-    // 2. Statistical Fallback
-    let components = [];
-    if (movie.imdb_rating && movie.imdb_rating !== 'N/A') {
-        const val = parseFloat(movie.imdb_rating);
-        if (!isNaN(val)) components.push(val * 10);
-    }
-    if (movie.rotten_tomatoes && movie.rotten_tomatoes !== 'N/A') {
-        const val = parseInt(movie.rotten_tomatoes);
-        if (!isNaN(val)) components.push(val);
-    }
+    // 2. SMARTER FALLBACK (Weighted Statistical Score)
+    let scoreSum = 0;
+    let weightSum = 0;
+
+    // Metacritic (High Authority) - Weight: 3.0
     if (movie.metascore && movie.metascore !== 'N/A') {
         const val = parseInt(movie.metascore);
-        if (!isNaN(val)) components.push(val);
+        if (!isNaN(val)) {
+            scoreSum += val * 3;
+            weightSum += 3;
+        }
     }
+
+    // Rotten Tomatoes (Consensus) - Weight: 2.5
+    if (movie.rotten_tomatoes && movie.rotten_tomatoes !== 'N/A') {
+        const val = parseInt(movie.rotten_tomatoes);
+        if (!isNaN(val)) {
+            scoreSum += val * 2.5;
+            weightSum += 2.5;
+        }
+    }
+
+    // IMDb (Audience) - Weight: 2.0
+    if (movie.imdb_rating && movie.imdb_rating !== 'N/A') {
+        const val = parseFloat(movie.imdb_rating);
+        if (!isNaN(val)) {
+            scoreSum += (val * 10) * 2.0;
+            weightSum += 2.0;
+        }
+    }
+
+    // TMDb (Data Source) - Weight: 1.0
     if (movie.tmdb_rating) {
-        components.push(movie.tmdb_rating * 10);
+        scoreSum += (movie.tmdb_rating * 10) * 1.0;
+        weightSum += 1.0;
     }
 
-    if (components.length === 0) return null;
+    if (weightSum === 0) return null;
 
-    let baseScore = components.reduce((a, b) => a + b, 0) / components.length;
-    let modifier = 0;
+    let finalScore = scoreSum / weightSum;
 
-    if (movie.roi && movie.roi !== 'N/A') {
-        const roiVal = parseFloat(movie.roi);
-        if (!isNaN(roiVal)) {
-            if (roiVal >= 4) modifier += 5;
-            else if (roiVal >= 2.5) modifier += 2;
-            else if (roiVal < 1) modifier -= 5;
+    // 3. THE "CULT CLASSIC" BONUS
+    if (movie.imdb_rating && movie.metascore && movie.metascore !== 'N/A') {
+        const imdbVal = parseFloat(movie.imdb_rating) * 10;
+        const metaVal = parseInt(movie.metascore);
+        if (imdbVal > metaVal + 15) {
+            finalScore += 5;
         }
     }
-    if (movie.revenue && movie.revenue !== 'N/A') {
+
+    // 4. BLOCKBUSTER BONUS
+    if (movie.revenue && typeof movie.revenue === 'string') {
         const revVal = parseInt(movie.revenue.replace(/[^0-9]/g, ''));
-        if (!isNaN(revVal)) {
-            if (revVal >= 1000000000) modifier += 5;
-        }
+        if (revVal >= 1000000000) finalScore += 3;
     }
 
-    return Math.min(100, Math.max(0, Math.round(baseScore + modifier)));
+    return Math.min(100, Math.round(finalScore));
 }
 
 function createBigCard(movie, rank, index) {
@@ -430,10 +362,66 @@ function closeModal() {
     document.body.style.overflow = 'auto';
 }
 
-function showError(message, retryQuery) {
+// --- LOADING UI LOGIC ---
+let statusInterval;
+
+const loadingSteps = [
+    { text: "Establishing Secure Link...", percent: "15%" },
+    { text: "Contacting Movie API...", percent: "30%" },
+    { text: "Parsing Search Query...", percent: "45%" },
+    { text: "Scanning Cinematic Multiverse...", percent: "60%" },
+    { text: "Cross-referencing Ratings...", percent: "75%" },
+    { text: "Calculating ROI & Budget...", percent: "85%" },
+    { text: "Finalizing Oracle Prediction...", percent: "95%" }
+];
+
+function cycleStatusMessages() {
+    const subtitleEl = document.getElementById('loading-subtitle');
+    const progressEl = document.getElementById('loading-progress');
+    if (!subtitleEl || !progressEl) return;
+
+    let index = 0;
+    progressEl.style.width = '0%';
+    subtitleEl.textContent = 'Initializing...';
+    subtitleEl.className = 'text-accent-gold/70 uppercase tracking-[0.2em] text-[10px] font-bold animate-pulse';
+
+    if (statusInterval) clearInterval(statusInterval);
+
+    setTimeout(() => {
+        subtitleEl.textContent = loadingSteps[0].text;
+        progressEl.style.width = loadingSteps[0].percent;
+    }, 50);
+
+    statusInterval = setInterval(() => {
+        index++;
+        if (index >= loadingSteps.length) {
+            clearInterval(statusInterval);
+            return;
+        }
+        subtitleEl.textContent = loadingSteps[index].text;
+        progressEl.style.width = loadingSteps[index].percent;
+    }, 800);
+}
+
+function showLoading() {
+    loading.classList.remove('hidden');
+    if (dashboard) dashboard.classList.add('hidden');
+    searchResults.classList.add('hidden');
+    emptyState.classList.add('hidden');
+    errorState.classList.add('hidden');
+    animateOracleText();
+    cycleStatusMessages();
+    lucide.createIcons();
+}
+
+function hideLoading() {
+    loading.classList.add('hidden');
+    if (statusInterval) clearInterval(statusInterval);
+}
+
+function showError(message, query) {
     hideLoading();
-    // Pass the query back to the handleSearch call
-    const retryCall = retryQuery ? `handleSearch('${escapeHtml(retryQuery)}')` : 'handleSearch()';
+    const retryCall = query ? `handleSearch('${escapeHtml(query)}')` : 'handleSearch()';
 
     errorState.innerHTML = `
         <div class="glass-panel border-red-500/20 rounded-2xl p-8 text-center max-w-2xl mx-auto mt-12">

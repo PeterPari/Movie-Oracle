@@ -56,7 +56,7 @@ class MovieResult(BaseModel):
     performance: str | None = None
     performance_color: str | None = None
     relevance_explanation: str | None = None
-    ai_score: int | None = None  # New field for Smart Oracle Score
+    oracle_score: int | None = None
 
 class SearchResponse(BaseModel):
     query: str
@@ -116,7 +116,7 @@ def search(request: SearchRequest):
         movie_id = movie.get("tmdb_id")
         rank_info = rank_map.get(movie_id, {})
         movie["relevance_explanation"] = rank_info.get("relevance_explanation", "")
-        movie["ai_score"] = rank_info.get("score") # Map the new score
+        movie["oracle_score"] = rank_info.get("oracle_score", None)
 
     # Sort
     ranked_ids = [r.get("tmdb_id") for r in ranked_movies if isinstance(r, dict)]

@@ -70,33 +70,27 @@ You MUST return ONLY valid JSON. No markdown, no explanation outside the JSON.
 - tmdb_keyword_tags: be specific (e.g. "time travel", "dystopia", "heist")
 """
 
-RANK_SYSTEM_PROMPT = """You are an expert film critic and recommendation engine. Given the user's original query and a list of candidate movies with full details (ratings, budget, revenue, runtime, cast, crew, keywords, streaming info), rank and evaluate them.
+RANK_SYSTEM_PROMPT = """You are an expert film critic and recommendation engine. Given the user's original query and a list of candidate movies, rank them and assign a "Oracle Score".
 
-You have deep knowledge of cinema. Use ALL available data to make intelligent rankings:
+You have deep knowledge of cinema. Use ALL available data:
 - **Strictly penalize** movies that do not match the core intent.
-- **Commercial vs. Critical**: Prioritize ROI for "hits", Ratings for "masterpieces".
-- **Budget Realism**: Check budget numbers for "low budget" queries.
+- **Oracle Score (0-100)**: This is a COMPATIBILITY score, not just a quality score.
+  - If user asks for "Best movies ever", *Godfather* = 99.
+  - If user asks for "So bad it's good", *The Room* = 98 (even if its real rating is low).
+  - If user asks for "90s Action", *Con Air* = 95.
 
-Return ONLY valid JSON, no markdown:
+Return ONLY valid JSON:
 {
-  "summary": "2-3 sentence overall recommendation summary with personality and insight",
+  "summary": "2-3 sentence overall recommendation summary",
   "ranked_movies": [
     {
       "tmdb_id": 12345,
       "rank": 1,
-      "score": 95,
-      "relevance_explanation": "1-2 sentence explanation of why this matches, referencing specific data (ROI, Awards, Keywords)"
+      "oracle_score": 95,
+      "relevance_explanation": "..."
     }
   ]
-}
-
-**Score Calculation (0-100)**:
-- Assign a 'score' to each movie.
-- **90-100**: Perfect match for intent AND high quality/cult status.
-- **75-89**: Good match, solid movie.
-- **50-74**: Loose match or mediocre execution.
-- **0-49**: Irrelevant or poor quality.
-"""
+}"""
 
 def _call_gemini_with_retry(model, contents, config):
     return client.models.generate_content(
@@ -183,5 +177,5 @@ def rank_and_explain(query, movies):
     except Exception:
         return {
             "summary": "Here are the movies I found:",
-            "ranked_movies": [{"tmdb_id": m.get("tmdb_id"), "rank": i+1, "score": None, "relevance_explanation": ""} for i, m in enumerate(movies)]
+            "ranked_movies": [{"tmdb_id": m.get("tmdb_id"), "rank": i+1, "oracle_score": None, "relevance_explanation": ""} for i, m in enumerate(movies)]
         }
