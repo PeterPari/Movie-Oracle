@@ -245,7 +245,7 @@ async function openModal(id) {
     document.body.style.overflow = 'hidden';
 
     try {
-        const response = await fetch(`/api/details/${id}`);
+        const response = await fetch(`${API_BASE_URL}/api/details/${id}`);
         if (response.ok) movie = await response.json();
     } catch (err) { console.error(err); }
 

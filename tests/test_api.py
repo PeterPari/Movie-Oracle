@@ -153,7 +153,7 @@ def test_search_ranking_failure_graceful(mock_extract, mock_search, mock_enrich,
     assert response.status_code == 200
     data = response.json()
     assert len(data["results"]) == 1
-    assert data["summary"] == "Here are the movies I found:"
+    assert data["summary"] == "Here are your results:"
 
 
 @patch("backend.main.enrich_movie_data", return_value=MOCK_ENRICHED)

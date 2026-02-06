@@ -157,24 +157,45 @@ def _search_by_discover(params):
     genre_ids = [GENRE_MAP[g.lower()] for g in genre_names if g.lower() in GENRE_MAP]
 
     actor_names = params.get("actors", [])
-    person_ids = _resolve_person_ids(actor_names)
-
     director_names = params.get("directors", [])
-    director_ids = _resolve_person_ids(director_names)
-
     company_names = params.get("companies", [])
-    company_ids = _resolve_company_ids(company_names)
 
-    # NEW: Handle thematic keywords (e.g. "time travel", "dystopia")
-    # We check both 'keywords' (if vague) and 'tmdb_keyword_tags' (if explicit)
+    # Handle thematic keywords
     keyword_texts = params.get("tmdb_keyword_tags", [])
     if not keyword_texts and params.get("keywords") and "discover" in params.get("strategies", []):
-         # If strategy is purely discover, use the generic keywords string as a tag source
-         # But only if it's short/specific enough to likely be a tag
-         if len(params["keywords"].split()) <= 3:
-             keyword_texts.append(params["keywords"])
-    
-    keyword_ids = _resolve_keyword_ids(keyword_texts)
+        if len(params["keywords"].split()) <= 3:
+            keyword_texts.append(params["keywords"])
+
+    # Parallel ID resolution for all entity types
+    person_ids = []
+    director_ids = []
+    company_ids = []
+    keyword_ids = []
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {}
+        if actor_names:
+            futures['actors'] = executor.submit(_resolve_person_ids, actor_names)
+        if director_names:
+            futures['directors'] = executor.submit(_resolve_person_ids, director_names)
+        if company_names:
+            futures['companies'] = executor.submit(_resolve_company_ids, company_names)
+        if keyword_texts:
+            futures['keywords'] = executor.submit(_resolve_keyword_ids, keyword_texts)
+        
+        for key, future in futures.items():
+            try:
+                result = future.result(timeout=5)
+                if key == 'actors':
+                    person_ids = result
+                elif key == 'directors':
+                    director_ids = result
+                elif key == 'companies':
+                    company_ids = result
+                elif key == 'keywords':
+                    keyword_ids = result
+            except Exception:
+                pass
 
     discover_params = {
         "sort_by": params.get("sort_by", "popularity.desc"),

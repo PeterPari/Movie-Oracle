@@ -123,7 +123,7 @@ def _call_gemini(system_prompt, user_prompt, temperature=0.3):
                 contents=user_prompt,
                 config={
                     "temperature": temperature,
-                    "max_output_tokens": 1500,
+                    "max_output_tokens": 1000,
                     "system_instruction": system_prompt,
                 }
             )
@@ -170,23 +170,20 @@ def extract_search_params(query):
         }
 
 def rank_and_explain(query, movies):
-    movie_summaries = []
-    for m in movies:
-        movie_summaries.append({
+    # Minimal payload to reduce AI tokens
+    movie_summaries = [
+        {
             "tmdb_id": m.get("tmdb_id"),
             "title": m.get("title"),
             "year": m.get("year"),
-            "overview": m.get("overview", "")[:300],
+            "overview": (m.get("overview", "") or "")[:200],  # Truncated further
             "tmdb_rating": m.get("tmdb_rating"),
-            "imdb_rating": m.get("imdb_rating"),
-            "rotten_tomatoes": m.get("rotten_tomatoes"),
             "director": m.get("director"),
-            "budget": m.get("budget"),
-            "revenue": m.get("revenue"),
-            "keywords": m.get("keywords")
-        })
+        }
+        for m in movies
+    ]
 
-    user_content = f"User query: {query}\n\nCandidate movies:\n{json.dumps(movie_summaries, indent=2)}"
+    user_content = f"User query: {query}\n\nCandidate movies:\n{json.dumps(movie_summaries)}"
 
     try:
         content = _call_gemini(RANK_SYSTEM_PROMPT, user_content, temperature=0.4)
