@@ -135,7 +135,7 @@ def _call_gemini(system_prompt, user_prompt, temperature=0.3):
     combined_prompt = f"{system_prompt}\n\nUser Query: {user_prompt}"
     
     response = client.models.generate_content(
-        model="gemini-2.0-flash-exp",
+        model="gemini-1.5-flash",
         contents=combined_prompt,
         config={
             "temperature": temperature,
