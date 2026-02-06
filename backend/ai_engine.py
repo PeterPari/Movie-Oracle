@@ -130,6 +130,12 @@ Query: "underrated gems from the 2000s"
 
 Query: "something to watch on a rainy day"
 {"strategies":["discover"],"keywords":"comfort movie rainy day","tmdb_keyword_tags":["heartwarming","feel-good"],"genres":["drama","romance","comedy"],"exclude_genres":["horror"],"companies":[],"actors":[],"directors":[],"crew":[],"year_from":null,"year_to":null,"min_rating":7.0,"max_rating":null,"min_votes":200,"min_budget":null,"max_budget":null,"sort_by":"vote_average.desc","language":null,"region":null,"similar_to_title":null,"runtime_min":null,"runtime_max":null,"include_adult":false,"explanation":"Selecting warm, soul-soothing cinema for a contemplative rainy afternoon"}
+
+Query: "horror for the family"
+{"strategies":["discover"],"keywords":"family horror","tmdb_keyword_tags":["family-friendly"],"genres":["horror","family"],"exclude_genres":[],"companies":[],"actors":[],"directors":[],"crew":[],"year_from":null,"year_to":null,"min_rating":6.0,"max_rating":null,"min_votes":100,"min_budget":null,"max_budget":null,"sort_by":"popularity.desc","language":null,"region":null,"similar_to_title":null,"runtime_min":null,"runtime_max":null,"include_adult":false,"explanation":"Hunting for family-friendly scares that won't traumatize the kids"}
+
+Query: "scary movies for kids"
+{"strategies":["discover"],"keywords":"kids horror","tmdb_keyword_tags":["children","family-friendly"],"genres":["horror","family","animation"],"exclude_genres":[],"companies":[],"actors":[],"directors":[],"crew":[],"year_from":null,"year_to":null,"min_rating":6.0,"max_rating":null,"min_votes":100,"min_budget":null,"max_budget":null,"sort_by":"popularity.desc","language":null,"region":null,"similar_to_title":null,"runtime_min":null,"runtime_max":null,"include_adult":false,"explanation":"Conjuring up spooky but age-appropriate thrills for young viewers"}
 """
 
 RANK_SYSTEM_PROMPT = """You are an expert film critic and recommendation engine. Given the user's original query and a list of candidate movies, rank them and assign a "Oracle Score".
@@ -211,8 +217,18 @@ def extract_search_params(query):
         for k, v in defaults.items():
             params.setdefault(k, v)
         return params
-    except Exception:
-        return {"strategies": ["title_search"], "keywords": query, "explanation": "Fallback search"}
+    except Exception as e:
+        print(f"AI extraction failed: {e}")
+        # Use discover for natural language fallback, not title_search
+        return {
+            "strategies": ["discover"],
+            "keywords": query,
+            "genres": [],
+            "tmdb_keyword_tags": [],
+            "sort_by": "popularity.desc",
+            "min_votes": 50,
+            "explanation": f"Exploring: {query}"
+        }
 
 def rank_and_explain(query, movies):
     movie_summaries = []
