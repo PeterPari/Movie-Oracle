@@ -97,6 +97,66 @@ function animateOracleText() {
     }
 }
 
+// ===== COLD START DETECTION =====
+let backendReady = false;
+
+function showColdStartNotification() {
+    let notification = document.getElementById('cold-start-notification');
+    if (!notification) {
+        notification = document.createElement('div');
+        notification.id = 'cold-start-notification';
+        notification.className = 'fixed top-4 left-1/2 -translate-x-1/2 z-50 glass-panel border border-accent-gold/30 rounded-xl px-6 py-4 flex items-center gap-4 animate-pulse';
+        notification.innerHTML = `
+            <div class="w-5 h-5 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin"></div>
+            <div>
+                <p class="text-cream font-bold text-sm">Starting Render, please wait</p>
+                <p class="text-cream/50 text-xs">(Can take up to 90 seconds)</p>
+            </div>
+        `;
+        document.body.appendChild(notification);
+    }
+    notification.classList.remove('hidden');
+}
+
+function hideColdStartNotification() {
+    const notification = document.getElementById('cold-start-notification');
+    if (notification) notification.classList.add('hidden');
+}
+
+async function ensureBackendReady() {
+    if (backendReady) return true;
+
+    showColdStartNotification();
+
+    const maxAttempts = 30; // 30 attempts * 3 seconds = 90 seconds max
+    const retryDelay = 3000;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+            const response = await fetch('/api/health', { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (response.ok) {
+                backendReady = true;
+                hideColdStartNotification();
+                return true;
+            }
+        } catch (e) {
+            // Backend not ready yet, continue retrying
+        }
+
+        if (attempt < maxAttempts - 1) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+    }
+
+    hideColdStartNotification();
+    return false;
+}
+
 async function handleSearch(retryQuery = null) {
     if (retryQuery) {
         searchInput.value = retryQuery;
@@ -106,6 +166,14 @@ async function handleSearch(retryQuery = null) {
     if (!query) return;
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Check if backend is ready (handles cold start)
+    const ready = await ensureBackendReady();
+    if (!ready) {
+        showError('Backend is taking too long to start. Please try again.', query);
+        return;
+    }
+
     showLoading();
 
     try {
@@ -126,6 +194,7 @@ async function handleSearch(retryQuery = null) {
         showError(error.message, query);
     }
 }
+
 
 function displayResults(data) {
     const progressEl = document.getElementById('loading-progress');

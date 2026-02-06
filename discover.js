@@ -5,6 +5,65 @@ const closeModalBtn = document.getElementById('close-modal');
 
 // State
 let allMovies = [];
+let backendReady = false;
+
+// ===== COLD START DETECTION =====
+function showColdStartNotification() {
+    let notification = document.getElementById('cold-start-notification');
+    if (!notification) {
+        notification = document.createElement('div');
+        notification.id = 'cold-start-notification';
+        notification.className = 'fixed top-4 left-1/2 -translate-x-1/2 z-50 glass-panel border border-accent-gold/30 rounded-xl px-6 py-4 flex items-center gap-4 animate-pulse';
+        notification.innerHTML = `
+            <div class="w-5 h-5 border-2 border-accent-gold/30 border-t-accent-gold rounded-full animate-spin"></div>
+            <div>
+                <p class="text-cream font-bold text-sm">Starting Render, please wait</p>
+                <p class="text-cream/50 text-xs">(Can take up to 90 seconds)</p>
+            </div>
+        `;
+        document.body.appendChild(notification);
+    }
+    notification.classList.remove('hidden');
+}
+
+function hideColdStartNotification() {
+    const notification = document.getElementById('cold-start-notification');
+    if (notification) notification.classList.add('hidden');
+}
+
+async function ensureBackendReady() {
+    if (backendReady) return true;
+
+    showColdStartNotification();
+
+    const maxAttempts = 30;
+    const retryDelay = 3000;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+            const response = await fetch('/api/health', { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (response.ok) {
+                backendReady = true;
+                hideColdStartNotification();
+                return true;
+            }
+        } catch (e) {
+            // Backend not ready yet
+        }
+
+        if (attempt < maxAttempts - 1) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+    }
+
+    hideColdStartNotification();
+    return false;
+}
 
 // Init
 document.addEventListener('DOMContentLoaded', async () => {
@@ -21,6 +80,16 @@ modalBackdrop.addEventListener('click', (e) => {
 });
 
 async function loadDiscoverContent() {
+    // Wait for backend to be ready
+    const ready = await ensureBackendReady();
+    if (!ready) {
+        ['trending-grid', 'now-playing-grid', 'top-rated-grid', 'upcoming-grid'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = `<p class="col-span-full text-cream/40 text-center py-8">Backend unavailable. Please refresh.</p>`;
+        });
+        return;
+    }
+
     try {
         const response = await fetch('/api/discover');
         if (!response.ok) throw new Error('Failed to fetch discover data');

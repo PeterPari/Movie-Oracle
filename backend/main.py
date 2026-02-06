@@ -25,6 +25,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/api/health")
+def health_check():
+    """Quick health check for cold-start detection."""
+    return {"status": "ok"}
+
+
 class SearchRequest(BaseModel):
     query: str
 
