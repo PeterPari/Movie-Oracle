@@ -232,9 +232,9 @@ def extract_search_params(query):
         params = _parse_json_response(content)
         # Defaults
         defaults = {
-            "strategies": ["title_search"], "keywords": query, "tmdb_keyword_tags": [],
+            "strategies": ["discover"], "keywords": query, "tmdb_keyword_tags": [],
             "genres": [], "companies": [], "sort_by": "popularity.desc",
-            "explanation": f"Searching for: {query}"
+            "explanation": f"Exploring: {query}"
         }
         for k, v in defaults.items():
             params.setdefault(k, v)

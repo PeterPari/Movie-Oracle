@@ -206,8 +206,8 @@ def _search_similar(params):
     return data.get("results", [])[:10]
 
 def search_movies(params: Dict) -> List[Dict]:
-    """Orchestrate search using multiple strategies."""
-    strategies = params.get("strategies", ["title_search"])
+    """Orchestrate search using multiple strategies with automatic fallback."""
+    strategies = params.get("strategies", ["discover"])
     all_results = []
     seen_ids = set()
 
@@ -219,15 +219,28 @@ def search_movies(params: Dict) -> List[Dict]:
             elif strategy == "multi_search":
                 results = _search_by_discover(params)
                 if len(results) < 5: results += _search_by_title(params)
-            else: results = _search_by_title(params)
+            else: results = _search_by_discover(params)
 
             for m in results:
                 mid = m.get("id")
                 if mid and mid not in seen_ids:
                     seen_ids.add(mid)
                     all_results.append(m)
-        except Exception:
+        except Exception as e:
+            print(f"Strategy {strategy} failed: {e}")
             continue
+
+    # FALLBACK: If discover returned nothing, try title search
+    if not all_results and "discover" in strategies and params.get("keywords"):
+        try:
+            results = _search_by_title(params)
+            for m in results:
+                mid = m.get("id")
+                if mid and mid not in seen_ids:
+                    seen_ids.add(mid)
+                    all_results.append(m)
+        except Exception:
+            pass
 
     return all_results[:10]
 
