@@ -5,9 +5,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-MODEL = "google/gemini-2.0-flash-001"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
 GENRE_MAP = {
     "action": 28,
@@ -127,23 +126,38 @@ Return ONLY valid JSON, no markdown:
 Be opinionated and helpful. If some results don't match well, say so honestly. If the results are great matches, be enthusiastic."""
 
 
-def _call_openrouter(messages, temperature=0.3):
+def _call_gemini(system_prompt, user_prompt, temperature=0.3):
+    """Call Google Gemini API directly"""
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "http://localhost:8000",
-        "X-Title": "Movie Oracle",
+        "x-goog-api-key": GEMINI_API_KEY,
     }
+    
+    # Gemini uses a different format - combine system and user prompts
+    combined_prompt = f"{system_prompt}\n\nUser Query: {user_prompt}"
+    
     payload = {
-        "model": MODEL,
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": 2000,
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": combined_prompt
+                    }
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": temperature,
+            "maxOutputTokens": 2000,
+        }
     }
-    response = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=30)
+    
+    response = requests.post(GEMINI_URL, headers=headers, json=payload, timeout=30)
     response.raise_for_status()
     data = response.json()
-    return data["choices"][0]["message"]["content"]
+    
+    # Extract text from Gemini's response format
+    return data["candidates"][0]["content"]["parts"][0]["text"]
 
 
 def _parse_json_response(content):
@@ -157,12 +171,8 @@ def _parse_json_response(content):
 
 
 def extract_search_params(query):
-    messages = [
-        {"role": "system", "content": EXTRACT_SYSTEM_PROMPT},
-        {"role": "user", "content": query},
-    ]
     try:
-        content = _call_openrouter(messages)
+        content = _call_gemini(EXTRACT_SYSTEM_PROMPT, query)
         params = _parse_json_response(content)
         # Ensure required fields
         params.setdefault("strategies", ["title_search"])
@@ -244,12 +254,8 @@ def rank_and_explain(query, movies):
         f"Candidate movies:\n{json.dumps(movie_summaries, indent=2)}"
     )
 
-    messages = [
-        {"role": "system", "content": RANK_SYSTEM_PROMPT},
-        {"role": "user", "content": user_content},
-    ]
     try:
-        content = _call_openrouter(messages, temperature=0.5)
+        content = _call_gemini(RANK_SYSTEM_PROMPT, user_content, temperature=0.5)
         return _parse_json_response(content)
     except (json.JSONDecodeError, KeyError, IndexError):
         return {
