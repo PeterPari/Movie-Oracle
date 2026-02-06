@@ -109,7 +109,6 @@ async function handleSearch() {
     const query = searchInput.value.trim();
     if (!query) return;
 
-    transitionToResults(); // REMOVED
     window.scrollTo({ top: 0, behavior: 'smooth' });
     showLoading();
 

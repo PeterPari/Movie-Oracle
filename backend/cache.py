@@ -1,6 +1,6 @@
 import sqlite3
-import json
 import time
+import json
 from typing import Optional, Dict, Any
 
 class SQLiteCache:
@@ -21,7 +21,7 @@ class SQLiteCache:
         except Exception as e:
             print(f"Cache Init Error: {e}")
 
-    def get(self, key: str) -> Optional[Dict]:
+    def get(self, key: str) -> Optional[Any]:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.execute("SELECT value, expiry FROM cache WHERE key = ?", (key,))
@@ -29,7 +29,10 @@ class SQLiteCache:
                 if row:
                     value, expiry = row
                     if expiry > time.time():
-                        return json.loads(value)
+                        try:
+                            return json.loads(value)
+                        except json.JSONDecodeError:
+                            return value 
                     else:
                         conn.execute("DELETE FROM cache WHERE key = ?", (key,))
         except Exception:
@@ -39,13 +42,18 @@ class SQLiteCache:
     def set(self, key: str, value: Any, ttl=86400): # Default 24h
         try:
             expiry = int(time.time() + ttl)
+            if isinstance(value, (dict, list)):
+                storage_value = json.dumps(value)
+            else:
+                storage_value = str(value)
+                
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute(
                     "INSERT OR REPLACE INTO cache (key, value, expiry) VALUES (?, ?, ?)",
-                    (key, json.dumps(value), expiry)
+                    (key, storage_value, expiry)
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Cache Set Error: {e}")
 
-# Initialize global cache
+# Global instance
 db_cache = SQLiteCache()
