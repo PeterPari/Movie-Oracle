@@ -192,3 +192,15 @@ def test_root_discover_js_served():
     assert response.status_code == 200
     assert "javascript" in response.headers["content-type"]
 
+
+def test_health_check():
+    response = client.get("/api/health")
+    assert response.status_code == 200
+    assert response.json().get("status") == "ok"
+
+
+def test_readiness_check():
+    response = client.get("/api/ready")
+    assert response.status_code == 200
+    assert response.json().get("status") == "ready"
+

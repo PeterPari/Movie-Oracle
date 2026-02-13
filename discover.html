@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Discover | Movie Oracle</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link
@@ -187,6 +188,21 @@
         <div class="text-center mb-20 section-reveal">
             <h1 class="text-6xl sm:text-7xl font-prestige text-cream mb-4 tracking-tight">Discover</h1>
             <p class="text-cream/30 text-sm serif italic">Explore the finest selections from the cinematic archives.</p>
+        </div>
+
+        <!-- Quick Title Search -->
+        <div class="max-w-2xl mx-auto mb-24 section-reveal" style="animation-delay: 0.15s;">
+            <div class="glass-panel rounded-2xl p-6 border border-white/5">
+                <p class="text-[9px] uppercase tracking-[0.3em] text-cream/40 font-bold mb-4">Quick Title Search</p>
+                <div class="flex gap-3 items-center">
+                    <input id="discover-search-input" type="text" placeholder="Search by movie title..."
+                        class="flex-1 bg-black/40 border border-white/10 rounded-full px-5 py-3 text-sm text-cream placeholder-cream/20 outline-none focus:border-accent-gold/50">
+                    <button id="discover-search-btn"
+                        class="px-5 py-3 rounded-full text-[10px] uppercase tracking-[0.2em] font-bold text-cream/70 border border-white/10 hover:text-accent-gold hover:border-accent-gold/40 transition-all">
+                        Search
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- Genre Pills -->

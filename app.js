@@ -27,6 +27,8 @@ const API_BASE_URL = window.location.hostname.includes('github.io')
 
 // State
 let allMovies = [];
+let exampleCycleInterval = null;
+let warmupDone = false;
 
 // Config: Curated Prompt Pool
 const EXAMPLE_PROMPTS = [
@@ -59,6 +61,15 @@ function renderRandomExamples() {
     lucide.createIcons();
 }
 
+function startExampleCycling() {
+    if (!examples) return;
+    if (exampleCycleInterval) clearInterval(exampleCycleInterval);
+    // Cycle every 6 seconds for visible variety
+    exampleCycleInterval = setInterval(() => {
+        renderRandomExamples();
+    }, 6000);
+}
+
 // Event listeners
 searchBtn.addEventListener('click', () => handleSearch());
 searchInput.addEventListener('keydown', (e) => {
@@ -83,8 +94,20 @@ modalBackdrop.addEventListener('click', (e) => {
 // Init
 document.addEventListener('DOMContentLoaded', () => {
     renderRandomExamples();
+    startExampleCycling();
+    warmBackend();
     lucide.createIcons();
 });
+
+function warmBackend() {
+    if (warmupDone) return;
+    warmupDone = true;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    fetch(`${API_BASE_URL}/api/health`, { signal: controller.signal })
+        .catch(() => {})
+        .finally(() => clearTimeout(timeoutId));
+}
 
 // ===== LETTER-BY-LETTER ORACLE ANIMATION =====
 function animateOracleText() {

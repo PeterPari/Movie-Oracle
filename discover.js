@@ -2,6 +2,8 @@
 const modalBackdrop = document.getElementById('modal-backdrop');
 const modalContent = document.getElementById('modal-content');
 const closeModalBtn = document.getElementById('close-modal');
+const discoverSearchInput = document.getElementById('discover-search-input');
+const discoverSearchBtn = document.getElementById('discover-search-btn');
 
 // API Configuration - use Render backend for GitHub Pages
 const API_BASE_URL = window.location.hostname.includes('github.io')
@@ -11,6 +13,7 @@ const API_BASE_URL = window.location.hostname.includes('github.io')
 // State
 let allMovies = [];
 let coldStartNotificationTimeout = null;
+let warmupDone = false;
 
 // ===== COLD START DETECTION (FAST) =====
 function showColdStartNotification() {
@@ -80,10 +83,22 @@ async function fetchWithRetry(url, options = {}, attempt = 0) {
 // Init
 document.addEventListener('DOMContentLoaded', async () => {
     lucide.createIcons();
+    warmBackend();
     await loadDiscoverContent();
     setupGenreButtons();
     setupStudioButtons();
+    setupTitleSearch();
 });
+
+function warmBackend() {
+    if (warmupDone) return;
+    warmupDone = true;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    fetch(`${API_BASE_URL}/api/health`, { signal: controller.signal })
+        .catch(() => {})
+        .finally(() => clearTimeout(timeoutId));
+}
 
 // Modal handlers
 closeModalBtn.addEventListener('click', closeModal);
@@ -139,6 +154,45 @@ function setupStudioButtons() {
             const companyId = btn.dataset.company;
             await loadStudioMovies(companyId, btn.textContent.trim());
         });
+    });
+}
+
+function setupTitleSearch() {
+    if (!discoverSearchInput || !discoverSearchBtn) return;
+
+    const runSearch = async () => {
+        const query = discoverSearchInput.value.trim();
+        if (!query) return;
+
+        const trendingGrid = document.getElementById('trending-grid');
+        if (!trendingGrid) return;
+        const trendingSection = trendingGrid.closest('section');
+        const trendingTitle = trendingSection.querySelector('h2');
+
+        trendingTitle.textContent = `Results for "${query}"`;
+        trendingGrid.innerHTML = Array(10).fill(0).map(() =>
+            '<div class="loading-shimmer aspect-[2/3] rounded-sm bg-white/5"></div>'
+        ).join('');
+
+        trendingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        try {
+            const data = await fetchWithRetry(`${API_BASE_URL}/api/search`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query })
+            });
+            renderMovieGrid('trending-grid', data.results);
+            allMovies = [...allMovies, ...(data.results || [])];
+        } catch (error) {
+            console.error('Error searching titles:', error);
+            trendingGrid.innerHTML = `<p class="col-span-full text-cream/40 text-center py-8">Failed to search for "${escapeHtml(query)}".</p>`;
+        }
+    };
+
+    discoverSearchBtn.addEventListener('click', runSearch);
+    discoverSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') runSearch();
     });
 }
 

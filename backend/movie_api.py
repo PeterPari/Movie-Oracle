@@ -3,6 +3,8 @@ import requests
 import json
 
 import time
+import random
+import hashlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
@@ -179,8 +181,24 @@ def _find_movie_id_by_title(title):
 def _search_by_title(params):
     keywords = params.get("keywords", "")
     if not keywords: return []
-    data = _tmdb_get("/search/movie", {"query": keywords, "page": 1})
-    return data.get("results", [])[:10]
+    pages = [1]
+    if len(keywords.split()) >= 2:
+        pages.append(2)
+    results = []
+    with ThreadPoolExecutor(max_workers=len(pages)) as executor:
+        futures = [executor.submit(_tmdb_get, "/search/movie", {"query": keywords, "page": p}) for p in pages]
+        for future in as_completed(futures):
+            data = future.result() or {}
+            results.extend(data.get("results", [])[:10])
+    # De-duplicate by id
+    seen = set()
+    deduped = []
+    for m in results:
+        mid = m.get("id")
+        if mid and mid not in seen:
+            seen.add(mid)
+            deduped.append(m)
+    return deduped[:20]
 
 def _search_by_discover(params):
     genre_names = params.get("genres", [])
@@ -232,6 +250,29 @@ def _search_by_discover(params):
         "page": 1,
         "vote_count.gte": params.get("min_votes") or 50,
     }
+
+    # If no effective filters resolve (common when AI fails), fall back to keyword search.
+    has_effective_filters = any([
+        genre_ids,
+        person_ids,
+        director_ids,
+        company_ids,
+        keyword_ids,
+        params.get("year_from"),
+        params.get("year_to"),
+        params.get("min_rating"),
+        params.get("max_rating"),
+        params.get("runtime_min"),
+        params.get("runtime_max"),
+        (params.get("min_votes") or 0) > 50,
+    ])
+
+    if not has_effective_filters:
+        # Prefer real keyword-based results over default popular list
+        if params.get("keywords"):
+            return _search_by_title(params)
+        # If no keywords, randomize page to avoid identical lists
+        discover_params["page"] = 1 + (int(time.time()) % 5)
 
     # Use OR (|) for 3+ genres so movies don't need ALL genres at once
     if genre_ids:
@@ -287,6 +328,13 @@ def _discover_relaxed(params: Dict) -> List[Dict]:
             print("Relaxed: dropped keywords + loosened filters")
             results = relaxed_results
 
+    # Attempt 4: If still sparse, try title search directly (obscure queries)
+    if len(results) < MIN_RESULTS:
+        title_results = _search_by_title(params)
+        if len(title_results) > len(results):
+            print("Relaxed: title search fallback")
+            results = title_results
+
     return results
 
 
@@ -336,6 +384,13 @@ def search_movies(params: Dict) -> List[Dict]:
                     break
             except Exception:
                 pass
+
+    # Diversity sampling: stable shuffle based on query to avoid stale top results
+    if len(all_results) > 10:
+        seed_source = params.get("_original_query") or params.get("keywords") or ""
+        seed = int(hashlib.md5(seed_source.encode()).hexdigest(), 16) % (10**8)
+        rng = random.Random(seed)
+        rng.shuffle(all_results)
 
     return all_results[:10]
 
@@ -403,7 +458,7 @@ def get_movie_details(tmdb_id: int) -> Optional[Dict]:
     tmdb = _tmdb_get(f"/movie/{tmdb_id}", {"append_to_response": "credits,watch/providers,keywords"})
     return tmdb if tmdb else None
 
-def format_movie_result(tmdb: Dict) -> Dict:
+def format_movie_result(tmdb: Dict, resolve_links: bool = True) -> Dict:
     """Merge TMDb and OMDb data with ROI analysis."""
     omdb = tmdb.get("_omdb") or {}
 
@@ -460,6 +515,12 @@ def format_movie_result(tmdb: Dict) -> Dict:
         if rating["Source"] == "Rotten Tomatoes":
             rt_score = rating["Value"]
 
+    director_links = None
+    actor_links = None
+    if resolve_links:
+        director_links = _resolve_people_links([c for c in tmdb.get("credits", {}).get("crew", []) if c.get("job") == "Director"])
+        actor_links = _resolve_people_links(tmdb.get("credits", {}).get("cast", [])[:5])
+
     return {
         "tmdb_id": tmdb.get("id"),
         "title": tmdb.get("title"),
@@ -476,8 +537,8 @@ def format_movie_result(tmdb: Dict) -> Dict:
         "director": omdb.get("Director") or ", ".join([c["name"] for c in tmdb.get("credits", {}).get("crew", []) if c.get("job") == "Director"]),
         "writers": omdb.get("Writer"),
         "actors": omdb.get("Actors") or ", ".join([c["name"] for c in tmdb.get("credits", {}).get("cast", [])[:5]]),
-        "director_links": _resolve_people_links([c for c in tmdb.get("credits", {}).get("crew", []) if c.get("job") == "Director"]),
-        "actor_links": _resolve_people_links(tmdb.get("credits", {}).get("cast", [])[:5]),
+        "director_links": director_links,
+        "actor_links": actor_links,
         "genres": ", ".join([g["name"] for g in tmdb.get("genres", [])]) if tmdb.get("genres") else None,
         "budget": budget_str,
         "revenue": revenue_str,

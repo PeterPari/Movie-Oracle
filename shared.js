@@ -11,46 +11,38 @@ function escapeHtml(str) {
 }
 
 function calculateOracleScore(movie) {
-    if (movie.oracle_score !== undefined && movie.oracle_score !== null) {
-        return movie.oracle_score;
-    }
+    const baseScore = Number(movie.oracle_score);
+    if (Number.isFinite(baseScore)) return Math.max(0, Math.min(100, Math.round(baseScore)));
+
+    const toNumber = (val) => {
+        if (val === null || val === undefined) return null;
+        if (typeof val === 'number') return Number.isFinite(val) ? val : null;
+        if (typeof val === 'string') {
+            if (val.trim().toUpperCase() === 'N/A') return null;
+            const cleaned = val.replace(/[^0-9.]/g, '');
+            const num = parseFloat(cleaned);
+            return Number.isFinite(num) ? num : null;
+        }
+        return null;
+    };
+
+    const metascore = toNumber(movie.metascore); // 0-100
+    const rottenTomatoes = toNumber(movie.rotten_tomatoes); // 0-100
+    const imdb = toNumber(movie.imdb_rating); // 0-10
+    const tmdb = toNumber(movie.tmdb_rating); // 0-10
 
     let scoreSum = 0;
     let weightSum = 0;
 
-    if (movie.metascore && movie.metascore !== 'N/A') {
-        const val = parseInt(movie.metascore);
-        if (!isNaN(val)) { scoreSum += val * 3; weightSum += 3; }
-    }
-    if (movie.rotten_tomatoes && movie.rotten_tomatoes !== 'N/A') {
-        const val = parseInt(movie.rotten_tomatoes);
-        if (!isNaN(val)) { scoreSum += val * 2.5; weightSum += 2.5; }
-    }
-    if (movie.imdb_rating && movie.imdb_rating !== 'N/A') {
-        const val = parseFloat(movie.imdb_rating);
-        if (!isNaN(val)) { scoreSum += (val * 10) * 2.0; weightSum += 2.0; }
-    }
-    if (movie.tmdb_rating) {
-        scoreSum += (movie.tmdb_rating * 10) * 1.0;
-        weightSum += 1.0;
-    }
+    if (metascore !== null) { scoreSum += metascore * 3.0; weightSum += 3.0; }
+    if (rottenTomatoes !== null) { scoreSum += rottenTomatoes * 2.5; weightSum += 2.5; }
+    if (imdb !== null) { scoreSum += (imdb * 10) * 2.0; weightSum += 2.0; }
+    if (tmdb !== null) { scoreSum += (tmdb * 10) * 1.5; weightSum += 1.5; }
 
     if (weightSum === 0) return null;
 
-    let finalScore = scoreSum / weightSum;
-
-    if (movie.imdb_rating && movie.metascore && movie.metascore !== 'N/A') {
-        const imdbVal = parseFloat(movie.imdb_rating) * 10;
-        const metaVal = parseInt(movie.metascore);
-        if (imdbVal > metaVal + 15) finalScore += 5;
-    }
-
-    if (movie.revenue && typeof movie.revenue === 'string') {
-        const revVal = parseInt(movie.revenue.replace(/[^0-9]/g, ''));
-        if (revVal >= 1000000000) finalScore += 3;
-    }
-
-    return Math.min(100, Math.round(finalScore));
+    const finalScore = scoreSum / weightSum;
+    return Math.max(0, Math.min(100, Math.round(finalScore)));
 }
 
 function renderPeopleLinks(links, fallbackStr) {

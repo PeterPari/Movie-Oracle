@@ -1,10 +1,12 @@
 from pathlib import Path
+import time
 from concurrent.futures import ThreadPoolExecutor
+from typing import Optional, List
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -15,6 +17,7 @@ from backend.movie_api import (
     get_trending_movies, get_upcoming_movies, get_now_playing, get_top_rated,
     get_movies_by_genre, get_movies_by_company, get_movie_details
 )
+from backend.cache import db_cache
 
 app = FastAPI(title="Movie Oracle", version="2.1.0")
 
@@ -34,57 +37,61 @@ def health_check():
     """Quick health check for cold-start detection."""
     return {"status": "ok"}
 
+@app.get("/api/ready")
+def readiness_check():
+    return {"status": "ready"}
+
 
 class SearchRequest(BaseModel):
     query: str
 
 class PersonLink(BaseModel):
     name: str
-    imdb_url: str | None = None
+    imdb_url: Optional[str] = None
 
 class WatchProviderItem(BaseModel):
     name: str
-    logo_url: str | None = None
+    logo_url: Optional[str] = None
 
 class WatchProviders(BaseModel):
-    link: str | None = None
-    flatrate: list[WatchProviderItem] = []
-    rent: list[WatchProviderItem] = []
-    buy: list[WatchProviderItem] = []
+    link: Optional[str] = None
+    flatrate: List[WatchProviderItem] = Field(default_factory=list)
+    rent: List[WatchProviderItem] = Field(default_factory=list)
+    buy: List[WatchProviderItem] = Field(default_factory=list)
 
 class MovieResult(BaseModel):
-    tmdb_id: int | None = None
+    tmdb_id: Optional[int] = None
     title: str
-    year: str | None = None
-    overview: str | None = None
-    tagline: str | None = None
-    poster_url: str | None = None
-    backdrop_url: str | None = None
-    tmdb_rating: float | None = None
-    imdb_rating: str | None = None
-    rotten_tomatoes: str | None = None
-    metascore: str | None = None
-    rated: str | None = None
-    director: str | None = None
-    writers: str | None = None
-    actors: str | None = None
-    director_links: list[PersonLink] | None = None
-    actor_links: list[PersonLink] | None = None
-    genres: str | None = None
-    budget: str | None = None
-    budget_raw: int | None = None
-    revenue: str | None = None
-    runtime: int | None = None
-    keywords: str | None = None
-    production_countries: str | None = None
-    spoken_languages: str | None = None
-    streaming: str | None = None
-    watch_providers: WatchProviders | None = None
-    roi: str | None = None
-    performance: str | None = None
-    performance_color: str | None = None
-    relevance_explanation: str | None = None
-    oracle_score: int | None = None
+    year: Optional[str] = None
+    overview: Optional[str] = None
+    tagline: Optional[str] = None
+    poster_url: Optional[str] = None
+    backdrop_url: Optional[str] = None
+    tmdb_rating: Optional[float] = None
+    imdb_rating: Optional[str] = None
+    rotten_tomatoes: Optional[str] = None
+    metascore: Optional[str] = None
+    rated: Optional[str] = None
+    director: Optional[str] = None
+    writers: Optional[str] = None
+    actors: Optional[str] = None
+    director_links: Optional[List[PersonLink]] = None
+    actor_links: Optional[List[PersonLink]] = None
+    genres: Optional[str] = None
+    budget: Optional[str] = None
+    budget_raw: Optional[int] = None
+    revenue: Optional[str] = None
+    runtime: Optional[int] = None
+    keywords: Optional[str] = None
+    production_countries: Optional[str] = None
+    spoken_languages: Optional[str] = None
+    streaming: Optional[str] = None
+    watch_providers: Optional[WatchProviders] = None
+    roi: Optional[str] = None
+    performance: Optional[str] = None
+    performance_color: Optional[str] = None
+    relevance_explanation: Optional[str] = None
+    oracle_score: Optional[int] = None
 
 class SearchResponse(BaseModel):
     query: str
@@ -108,10 +115,19 @@ def search(request: SearchRequest):
     if not query:
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
+    cache_key = f"search:{query.lower()}"
+    cached = db_cache.get(cache_key)
+    if cached:
+        return cached
+
+    start_time = time.perf_counter()
+
     try:
         params = extract_search_params(query)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AI service error: {str(e)}")
+
+    t_ai = time.perf_counter()
 
     ai_interpretation = params.get("explanation", "Searching for movies...")
 
@@ -120,16 +136,22 @@ def search(request: SearchRequest):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Movie search error: {str(e)}")
 
+    t_search = time.perf_counter()
+
     if not raw_movies:
-        return SearchResponse(
+        response = SearchResponse(
             query=query,
             ai_interpretation=ai_interpretation,
             summary="No movies found matching your query.",
             results=[],
         )
+        db_cache.set(cache_key, response.dict(), ttl=600)
+        return response
 
     enriched = enrich_movie_data(raw_movies)
-    formatted = [format_movie_result(m) for m in enriched]
+    formatted = [format_movie_result(m, resolve_links=False) for m in enriched]
+
+    t_enrich = time.perf_counter()
 
     # Budget post-filtering (TMDb discover doesn't support budget filters)
     min_budget = params.get("min_budget")
@@ -159,6 +181,8 @@ def search(request: SearchRequest):
     except Exception as e:
         print(f"Ranking error: {e}")
 
+    t_rank = time.perf_counter()
+
     # Merge ranking data (rank, explanation, SCORE)
     ranked_movies = ranking.get("ranked_movies", [])
     rank_map = {r["tmdb_id"]: r for r in ranked_movies if isinstance(r, dict) and "tmdb_id" in r}
@@ -173,19 +197,26 @@ def search(request: SearchRequest):
     ranked_ids = [r.get("tmdb_id") for r in ranked_movies if isinstance(r, dict)]
     formatted.sort(key=lambda m: ranked_ids.index(m.get("tmdb_id")) if m.get("tmdb_id") in ranked_ids else 999)
 
-    return SearchResponse(
+    response = SearchResponse(
         query=query,
         ai_interpretation=ai_interpretation,
         summary=ranking.get("summary", "Here are your results:"),
         results=[MovieResult(**m) for m in formatted],
     )
+    db_cache.set(cache_key, response.dict(), ttl=600)
+    total = time.perf_counter() - start_time
+    print(
+        f"Search timings: ai={t_ai-start_time:.2f}s search={t_search-t_ai:.2f}s "
+        f"enrich={t_enrich-t_search:.2f}s rank={t_rank-t_enrich:.2f}s total={total:.2f}s"
+    )
+    return response
 
 @app.get("/api/details/{tmdb_id}", response_model=MovieResult)
 def get_details(tmdb_id: int):
     movie = get_movie_details(tmdb_id)
     if not movie: raise HTTPException(status_code=404, detail="Movie not found")
     enriched = enrich_movie_data([movie])
-    return MovieResult(**format_movie_result(enriched[0]))
+    return MovieResult(**format_movie_result(enriched[0], resolve_links=True))
 
 @app.get("/api/trending", response_model=TrendingResponse)
 def get_trending():

@@ -1,5 +1,6 @@
 import hashlib
 import threading
+import re
 from tenacity import retry, stop_after_attempt, wait_exponential
 from backend.cache import db_cache
 from google import genai
@@ -10,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 # Limit concurrent Gemini calls
 gemini_semaphore = threading.Semaphore(5)
@@ -105,6 +106,8 @@ Return ONLY valid JSON, no markdown:
 {"summary":"...","ranked_movies":[{"tmdb_id":12345,"rank":1,"oracle_score":95,"relevance_explanation":"..."}]}"""
 
 def _call_gemini_with_retry(model, contents, config):
+    if client is None:
+        raise RuntimeError("GEMINI_API_KEY is not configured")
     return client.models.generate_content(
         model=model,
         contents=contents,
@@ -116,6 +119,8 @@ def _safe_generate_content(model, contents, config):
     return _call_gemini_with_retry(model, contents, config)
 
 def _call_gemini(system_prompt, user_prompt, temperature=0.3):
+    if client is None:
+        return "{}"
     prompt_hash = hashlib.md5((system_prompt + user_prompt).encode()).hexdigest()
     cache_key = f"gemini:{prompt_hash}:{temperature}"
 
@@ -150,37 +155,118 @@ def _parse_json_response(content):
     content = content.strip()
     return json.loads(content)
 
+def _heuristic_params(query: str) -> dict:
+    lowered = query.lower()
+    params: dict = {}
+
+    # Detect genres by keyword presence
+    genre_hits = []
+    genre_aliases = {
+        "sci fi": "science fiction",
+        "sci-fi": "science fiction",
+        "scifi": "science fiction",
+        "romcom": "romance",
+        "rom-com": "romance",
+    }
+    for alias, canonical in genre_aliases.items():
+        if alias in lowered:
+            genre_hits.append(canonical)
+    for g in GENRE_MAP.keys():
+        if g in lowered:
+            genre_hits.append(g)
+    if genre_hits:
+        params["genres"] = sorted(set(genre_hits))
+
+    # Director/actor patterns
+    director_names = []
+    actor_names = []
+    by_match = re.search(r"(?:directed\s+by|by)\s+([a-zA-Z .'-]{3,})", query, re.IGNORECASE)
+    if by_match:
+        name = by_match.group(1).strip()
+        name = re.split(r"\b(with|and|in|from|before|after|like)\b", name, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+        if len(name.split()) >= 2:
+            director_names.append(name)
+    starring_match = re.search(r"(?:starring|with)\s+([a-zA-Z .'-]{3,})", query, re.IGNORECASE)
+    if starring_match:
+        name = starring_match.group(1).strip()
+        name = re.split(r"\b(and|in|from|before|after|like)\b", name, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+        if len(name.split()) >= 2:
+            actor_names.append(name)
+
+    last_name_match = re.search(r"([A-Z][a-z]+)\s+(movies|films|film|movie)$", query.strip())
+    if last_name_match:
+        director_names.append(last_name_match.group(1))
+
+    if director_names:
+        params["directors"] = director_names
+    if actor_names:
+        params["actors"] = actor_names
+
+    # Years / decades
+    decade_match = re.search(r"(19|20)\d0s", lowered)
+    if decade_match:
+        decade = int(decade_match.group(0)[:4])
+        params["year_from"] = decade
+        params["year_to"] = decade + 9
+    year_range_match = re.search(r"\b(?:19|20)\d{2}\b\s*(?:-|to)\s*\b(?:19|20)\d{2}\b", lowered)
+    if year_range_match:
+        years = re.findall(r"\b(?:19|20)\d{2}\b", year_range_match.group(0))
+        if len(years) >= 2:
+            params["year_from"] = int(years[0])
+            params["year_to"] = int(years[1])
+    single_year_match = re.search(r"\b(19|20)\d{2}\b", lowered)
+    if single_year_match and "year_from" not in params:
+        year = int(single_year_match.group(0))
+        params["year_from"] = year
+        params["year_to"] = year
+
+    # Similarity intent
+    like_match = re.search(r"(?:like|similar to)\s+(.+)$", query, re.IGNORECASE)
+    if like_match:
+        title = like_match.group(1).strip()
+        if title:
+            params["similar_to_title"] = title
+            params["strategies"] = ["similar"]
+
+    return params
+
 def extract_search_params(query):
     try:
+        heuristic = _heuristic_params(query)
         content = _call_gemini(EXTRACT_SYSTEM_PROMPT, query, temperature=0.2)
         params = _parse_json_response(content)
 
-        # Detect empty/failed AI response (Gemini returns "{}" on error)
-        has_useful_params = (
-            params.get("genres") or params.get("tmdb_keyword_tags") or
-            params.get("actors") or params.get("directors") or
-            params.get("companies") or params.get("similar_to_title") or
-            params.get("year_from") or params.get("year_to")
-        )
-        if not has_useful_params:
-            raise ValueError("AI returned empty params, using smart fallback")
-
-        # Defaults
+        # Defaults (always ensure flexible strategies + keywords)
         defaults = {
-            "strategies": ["discover"], "keywords": query, "tmdb_keyword_tags": [],
-            "genres": [], "companies": [], "sort_by": "popularity.desc",
+            "strategies": ["discover"],
+            "keywords": query,
+            "tmdb_keyword_tags": [],
+            "genres": [],
+            "companies": [],
+            "sort_by": "popularity.desc",
+            "min_votes": 50,
             "explanation": f"Exploring: {query}"
         }
         for k, v in defaults.items():
             params.setdefault(k, v)
+        # If a query looks like a specific title, add title_search strategy
+        if len(query.split()) <= 5 and query.strip().lower().startswith(("show me ", "find ", "movie ", "film ", "watch ")):
+            params["strategies"] = list({*params.get("strategies", []), "title_search"})
+        # If AI returns empty-ish params, seed keyword tags from query terms
+        if not params.get("tmdb_keyword_tags"):
+            query_words = [w.lower() for w in query.split() if len(w) >= 3]
+            params["tmdb_keyword_tags"] = query_words[:3]
+        # Merge heuristic hints when AI left fields empty
+        for key, value in heuristic.items():
+            if key not in params or not params.get(key):
+                params[key] = value
         params["_original_query"] = query
         return params
     except Exception as e:
         print(f"AI extraction failed: {e}")
-        # Use discover with query words as keyword tags for better results
-        # e.g. "Cult Classics" -> try ["cult", "classics"] as keyword tags
+        heuristic = _heuristic_params(query)
         query_words = [w.lower() for w in query.split() if len(w) >= 3]
-        return {
+        params = {
             "strategies": ["discover"],
             "keywords": query,
             "genres": [],
@@ -190,8 +276,18 @@ def extract_search_params(query):
             "_original_query": query,
             "explanation": f"Exploring: {query}"
         }
+        if len(query.split()) <= 5:
+            params["strategies"].append("title_search")
+        for key, value in heuristic.items():
+            params[key] = value
+        return params
 
 def rank_and_explain(query, movies):
+    if client is None:
+        return {
+            "summary": "Here are the movies I found:",
+            "ranked_movies": [{"tmdb_id": m.get("tmdb_id"), "rank": i+1, "oracle_score": None, "relevance_explanation": ""} for i, m in enumerate(movies)]
+        }
     # Minimal payload to reduce AI tokens
     movie_summaries = [
         {
