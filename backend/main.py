@@ -138,7 +138,21 @@ def search(request: SearchRequest):
 
     t_search = time.perf_counter()
 
+    # If TMDb returned nothing, provide a local demo fallback for dev (keeps Discover useful offline)
     if not raw_movies:
+        from backend.movie_api import get_demo_light_results
+        demo = get_demo_light_results(query)
+        if demo:
+            # Return demo results immediately (they are already in 'light' format)
+            response = SearchResponse(
+                query=query,
+                ai_interpretation=ai_interpretation,
+                summary="Demo results (TMDb unavailable or returned no matches)",
+                results=[MovieResult(**m) for m in demo],
+            )
+            db_cache.set(cache_key, response.dict(), ttl=60)
+            return response
+
         response = SearchResponse(
             query=query,
             ai_interpretation=ai_interpretation,

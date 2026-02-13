@@ -8,7 +8,7 @@ import hashlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
-from backend.ai_engine import GENRE_MAP
+from backend.ai_engine import GENRE_MAP, suggest_titles
 
 # Load environment variables
 load_dotenv()
@@ -204,6 +204,9 @@ def _search_by_discover(params):
     genre_names = params.get("genres", [])
     genre_ids = [GENRE_MAP[g.lower()] for g in genre_names if g.lower() in GENRE_MAP]
 
+    exclude_genre_names = params.get("exclude_genres", [])
+    exclude_genre_ids = [GENRE_MAP[g.lower()] for g in exclude_genre_names if g.lower() in GENRE_MAP]
+
     actor_names = params.get("actors", [])
     director_names = params.get("directors", [])
     company_names = params.get("companies", [])
@@ -278,6 +281,8 @@ def _search_by_discover(params):
     if genre_ids:
         sep = "|" if len(genre_ids) >= 3 else ","
         discover_params["with_genres"] = sep.join(str(g) for g in genre_ids)
+    if exclude_genre_ids:
+        discover_params["without_genres"] = ",".join(str(g) for g in exclude_genre_ids)
     if person_ids: discover_params["with_cast"] = "|".join(str(p) for p in person_ids)
     if director_ids: discover_params["with_crew"] = "|".join(str(d) for d in director_ids)
     if company_ids: discover_params["with_companies"] = "|".join(str(c) for c in company_ids)
@@ -384,6 +389,21 @@ def search_movies(params: Dict) -> List[Dict]:
                     break
             except Exception:
                 pass
+
+    # AI title suggestions fallback for flexible queries
+    if len(all_results) < 5:
+        query = params.get("_original_query") or params.get("keywords") or ""
+        titles = suggest_titles(query)
+        if titles:
+            with ThreadPoolExecutor(max_workers=min(6, len(titles))) as executor:
+                futures = [executor.submit(_tmdb_get, "/search/movie", {"query": title, "page": 1}) for title in titles]
+                for future in as_completed(futures):
+                    data = future.result() or {}
+                    for m in data.get("results", [])[:2]:
+                        mid = m.get("id")
+                        if mid and mid not in seen_ids:
+                            seen_ids.add(mid)
+                            all_results.append(m)
 
     # Diversity sampling: stable shuffle based on query to avoid stale top results
     if len(all_results) > 10:
@@ -587,3 +607,74 @@ def get_movies_by_genre(genre_id: int) -> List[Dict]:
         "page": 1,
     })
     return data.get("results", [])[:20] if data else []
+
+
+# --- Local/demo fallback (used when TMDb is not configured or returns no results) ---
+DEMO_LIGHT_RESULTS = [
+    {
+        "tmdb_id": 1000001,
+        "title": "The Princess Bride",
+        "year": "1987",
+        "overview": "A charming, adventure-filled fairy tale full of wit and heart.",
+        "poster_url": "https://via.placeholder.com/300x450/0f172a/666?text=Princess+Bride",
+        "tmdb_rating": 8.1
+    },
+    {
+        "tmdb_id": 1000002,
+        "title": "Amélie",
+        "year": "2001",
+        "overview": "A whimsical Parisian tale about love and small joys.",
+        "poster_url": "https://via.placeholder.com/300x450/0f172a/666?text=Amelie",
+        "tmdb_rating": 8.3
+    },
+    {
+        "tmdb_id": 1000003,
+        "title": "Paddington",
+        "year": "2014",
+        "overview": "A kind-hearted bear's gentle adventures in London.",
+        "poster_url": "https://via.placeholder.com/300x450/0f172a/666?text=Paddington",
+        "tmdb_rating": 7.2
+    },
+    {
+        "tmdb_id": 1000004,
+        "title": "About Time",
+        "year": "2013",
+        "overview": "A time-traveling romantic comedy that's warm and sincere.",
+        "poster_url": "https://via.placeholder.com/300x450/0f172a/666?text=About+Time",
+        "tmdb_rating": 7.8
+    },
+    {
+        "tmdb_id": 1000005,
+        "title": "The Intouchables",
+        "year": "2011",
+        "overview": "An uplifting friendship that defies expectations.",
+        "poster_url": "https://via.placeholder.com/300x450/0f172a/666?text=Intouchables",
+        "tmdb_rating": 8.5
+    },
+    {
+        "tmdb_id": 1000006,
+        "title": "Little Women",
+        "year": "2019",
+        "overview": "A lovingly crafted adaptation about family and growth.",
+        "poster_url": "https://via.placeholder.com/300x450/0f172a/666?text=Little+Women",
+        "tmdb_rating": 7.8
+    },
+]
+
+
+def get_demo_light_results(query: str) -> List[Dict]:
+    """Return a small set of demo/light-weight movie dicts for local dev.
+    Matches are simple substring checks on title/overview; otherwise returns a shuffled slice.
+    """
+    if not query:
+        return DEMO_LIGHT_RESULTS[:6]
+
+    q = query.lower()
+    matches = [m for m in DEMO_LIGHT_RESULTS if q in m["title"].lower() or q in m["overview"].lower()]
+    if matches:
+        return matches
+    # Return a varied subset so searches feel responsive
+    random.seed(abs(hash(q)) % (10**8))
+    demo = DEMO_LIGHT_RESULTS.copy()
+    random.shuffle(demo)
+    return demo[:4]

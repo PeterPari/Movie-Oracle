@@ -3,7 +3,11 @@ import threading
 import re
 from tenacity import retry, stop_after_attempt, wait_exponential
 from backend.cache import db_cache
-from google import genai
+try:
+    from google import genai
+except Exception:  # google-genai not installed / unavailable in this environment
+    genai = None
+
 import os
 import json
 from dotenv import load_dotenv
@@ -11,7 +15,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+client = genai.Client(api_key=GEMINI_API_KEY) if (genai and GEMINI_API_KEY) else None
 
 # Limit concurrent Gemini calls
 gemini_semaphore = threading.Semaphore(5)
@@ -105,6 +109,15 @@ RANK_SYSTEM_PROMPT = """You are the Movie Oracle's ranking engine. Given the use
 Return ONLY valid JSON, no markdown:
 {"summary":"...","ranked_movies":[{"tmdb_id":12345,"rank":1,"oracle_score":95,"relevance_explanation":"..."}]}"""
 
+TITLE_SYSTEM_PROMPT = """You are a movie recommendation assistant. Given a user query, return ONLY valid JSON with a list of 8-12 movie titles that match the intent.
+
+Rules:
+- Return ONLY valid JSON, no markdown
+- Output format: {"titles":["Title 1","Title 2", ...]}
+- Use well-known or cult titles that plausibly exist in TMDb
+- Do NOT include years or extra commentary
+"""
+
 def _call_gemini_with_retry(model, contents, config):
     if client is None:
         raise RuntimeError("GEMINI_API_KEY is not configured")
@@ -159,6 +172,19 @@ def _heuristic_params(query: str) -> dict:
     lowered = query.lower()
     params: dict = {}
 
+    # Vibe mappings for common natural language queries
+    vibe_map = {
+        "comfort": {"tmdb_keyword_tags": ["feel good", "heartwarming"], "genres": ["comedy", "drama", "romance"], "exclude_genres": ["horror", "thriller"]},
+        "feel good": {"tmdb_keyword_tags": ["feel good", "heartwarming"], "genres": ["comedy", "drama", "romance"], "exclude_genres": ["horror", "thriller"]},
+        "cozy": {"tmdb_keyword_tags": ["feel good", "heartwarming"], "genres": ["comedy", "drama", "romance"]},
+        "uplifting": {"tmdb_keyword_tags": ["feel good", "heartwarming"], "genres": ["comedy", "drama", "romance"]},
+    }
+    for key, vibe in vibe_map.items():
+        if key in lowered:
+            params.setdefault("tmdb_keyword_tags", []).extend(vibe.get("tmdb_keyword_tags", []))
+            params.setdefault("genres", []).extend(vibe.get("genres", []))
+            params.setdefault("exclude_genres", []).extend(vibe.get("exclude_genres", []))
+
     # Detect genres by keyword presence
     genre_hits = []
     genre_aliases = {
@@ -175,7 +201,8 @@ def _heuristic_params(query: str) -> dict:
         if g in lowered:
             genre_hits.append(g)
     if genre_hits:
-        params["genres"] = sorted(set(genre_hits))
+        existing = params.get("genres", [])
+        params["genres"] = sorted(set(existing + genre_hits))
 
     # Director/actor patterns
     director_names = []
@@ -311,3 +338,26 @@ def rank_and_explain(query, movies):
             "summary": "Here are the movies I found:",
             "ranked_movies": [{"tmdb_id": m.get("tmdb_id"), "rank": i+1, "oracle_score": None, "relevance_explanation": ""} for i, m in enumerate(movies)]
         }
+
+def suggest_titles(query: str) -> list:
+    if client is None:
+        return []
+    try:
+        content = _call_gemini(TITLE_SYSTEM_PROMPT, query, temperature=0.6)
+        data = _parse_json_response(content)
+        titles = data.get("titles", []) if isinstance(data, dict) else []
+        if not isinstance(titles, list):
+            return []
+        # Clean and de-dup
+        cleaned = []
+        seen = set()
+        for t in titles:
+            if not t or not isinstance(t, str):
+                continue
+            name = t.strip()
+            if name and name.lower() not in seen:
+                seen.add(name.lower())
+                cleaned.append(name)
+        return cleaned[:12]
+    except Exception:
+        return []

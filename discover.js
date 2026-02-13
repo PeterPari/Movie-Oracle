@@ -4,6 +4,7 @@ const modalContent = document.getElementById('modal-content');
 const closeModalBtn = document.getElementById('close-modal');
 const discoverSearchInput = document.getElementById('discover-search-input');
 const discoverSearchBtn = document.getElementById('discover-search-btn');
+const navSearchTrigger = document.getElementById('nav-search-trigger');
 
 // API Configuration - use Render backend for GitHub Pages
 const API_BASE_URL = window.location.hostname.includes('github.io')
@@ -159,6 +160,14 @@ function setupStudioButtons() {
 
 function setupTitleSearch() {
     if (!discoverSearchInput || !discoverSearchBtn) return;
+
+    if (navSearchTrigger) {
+        navSearchTrigger.addEventListener('click', () => {
+            const searchSection = discoverSearchInput.closest('.glass-panel').parentElement;
+            searchSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => discoverSearchInput.focus(), 500);
+        });
+    }
 
     const runSearch = async () => {
         const query = discoverSearchInput.value.trim();

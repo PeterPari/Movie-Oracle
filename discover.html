@@ -174,11 +174,16 @@
                     class="text-[10px] uppercase tracking-[0.3em] font-bold text-cream group-hover:text-accent-gold transition-colors">Movie
                     Oracle</span>
             </a>
-            <a href="/"
-                class="text-[9px] uppercase tracking-[0.2em] font-bold text-cream/40 hover:text-accent-gold transition-all duration-300 flex items-center gap-2 border border-white/5 px-4 py-2 rounded-full hover:border-accent-gold/30 hover:bg-accent-gold/5">
-                <i data-lucide="arrow-left" class="w-3 h-3"></i>
-                Back to Oracle
-            </a>
+            <div class="flex items-center gap-4">
+                <button id="nav-search-trigger" class="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-cream/60 hover:text-accent-gold hover:border-accent-gold/40 transition-all">
+                    <i data-lucide="search" class="w-4 h-4"></i>
+                </button>
+                <a href="/"
+                    class="text-[9px] uppercase tracking-[0.2em] font-bold text-cream/40 hover:text-accent-gold transition-all duration-300 flex items-center gap-2 border border-white/5 px-4 py-2 rounded-full hover:border-accent-gold/30 hover:bg-accent-gold/5">
+                    <i data-lucide="arrow-left" class="w-3 h-3"></i>
+                    Back to Oracle
+                </a>
+            </div>
         </div>
     </nav>
 
@@ -195,7 +200,7 @@
             <div class="glass-panel rounded-2xl p-6 border border-white/5">
                 <p class="text-[9px] uppercase tracking-[0.3em] text-cream/40 font-bold mb-4">Quick Title Search</p>
                 <div class="flex gap-3 items-center">
-                    <input id="discover-search-input" type="text" placeholder="Search by movie title..."
+                    <input id="discover-search-input" type="text" placeholder="Search titles, genres, or vibes..."
                         class="flex-1 bg-black/40 border border-white/10 rounded-full px-5 py-3 text-sm text-cream placeholder-cream/20 outline-none focus:border-accent-gold/50">
                     <button id="discover-search-btn"
                         class="px-5 py-3 rounded-full text-[10px] uppercase tracking-[0.2em] font-bold text-cream/70 border border-white/10 hover:text-accent-gold hover:border-accent-gold/40 transition-all">
