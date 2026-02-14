@@ -10,6 +10,7 @@ except Exception:  # google-genai not installed / unavailable in this environmen
 
 import os
 import json
+from typing import List, Dict
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -116,6 +117,41 @@ Rules:
 - Output format: {"titles":["Title 1","Title 2", ...]}
 - Use well-known or cult titles that plausibly exist in TMDb
 - Do NOT include years or extra commentary
+"""
+
+CHAT_SYSTEM_PROMPT = """You are Movie Oracle Chat, a smart movie assistant.
+
+Behavior:
+- Be natural, warm, and concise like a normal chatbot.
+- Keep replies practical and specific (titles, genres, directors, eras, where useful).
+- Ask one clarifying question only when the user's request is ambiguous.
+- Treat each request independently. Do not rely on prior conversation context.
+- Prefer grounded recommendations over hype.
+
+Quality rules:
+- For ANY user query (even if it's about work, life, school, travel, coding, stress, etc.), infer the vibe/themes and recommend relevant movies.
+- Recommend 5 movies unless user asks otherwise.
+- For each recommendation, include a short reason tied to the user's query.
+- Never refuse just because the query is not explicitly about movies.
+
+Output rules:
+- Return plain text only (no JSON, no markdown fences).
+- Keep default response length to a compact list.
+"""
+
+FLEX_ANY_QUERY_PROMPT = """You are a movie mapping engine.
+
+Task: Convert ANY user query into relevant movie recommendations.
+
+Rules:
+- If query is not about movies, infer intent/themes/emotions and map to movies.
+- Return exactly 5 recommendations unless user explicitly requests a different count.
+- Recommendation reasons must be specific to the user's query intent.
+- Use real, recognizable movie titles.
+- Do not refuse or redirect.
+
+Return ONLY valid JSON, no markdown:
+{"intro":"one short sentence tying query to movie picks","recommendations":[{"title":"Movie Title","reason":"short reason"}]}
 """
 
 def _call_gemini_with_retry(model, contents, config):
@@ -361,3 +397,61 @@ def suggest_titles(query: str) -> list:
         return cleaned[:12]
     except Exception:
         return []
+
+
+def chat_with_oracle(messages: List[Dict[str, str]]) -> str:
+    if client is None:
+        return "I can help with movie recommendations, comparisons, genres, and watchlist ideas. Tell me your mood, favorite films, or what you're in the mood to watch tonight."
+
+    latest_user_message = ""
+    for message in reversed(messages):
+        if not isinstance(message, dict):
+            continue
+        role = (message.get("role") or "").strip().lower()
+        content = (message.get("content") or "").strip()
+        if role == "user" and content:
+            latest_user_message = content[:2000]
+            break
+
+    if not latest_user_message:
+        return "Tell me what kind of movie you're looking for, and I’ll give you focused picks."
+
+    user_prompt = f"User request: {latest_user_message}\nAssistant:"
+
+    try:
+        content = _call_gemini(FLEX_ANY_QUERY_PROMPT, latest_user_message, temperature=0.6)
+        data = _parse_json_response(content)
+        intro = (data.get("intro") or "").strip()
+        recommendations = data.get("recommendations", []) if isinstance(data, dict) else []
+        rows = []
+        for rec in recommendations[:5]:
+            if not isinstance(rec, dict):
+                continue
+            title = (rec.get("title") or "").strip()
+            reason = (rec.get("reason") or "").strip()
+            if title:
+                rows.append(f"- {title}: {reason}" if reason else f"- {title}")
+        if rows:
+            if intro:
+                return f"{intro}\n" + "\n".join(rows)
+            return "\n".join(rows)
+    except Exception:
+        pass
+
+    try:
+        response = _call_gemini(CHAT_SYSTEM_PROMPT, user_prompt, temperature=0.55)
+        text = (response or "").strip()
+        if text and "movie" in text.lower():
+            return text
+    except Exception:
+        pass
+
+    try:
+        fallback_titles = suggest_titles(latest_user_message)
+        if fallback_titles:
+            picks = fallback_titles[:5]
+            return "Here are relevant movie picks for your query:\n" + "\n".join([f"- {title}" for title in picks])
+    except Exception:
+        pass
+
+    return "I can help you find the right movie fast. Share your mood, preferred genres, and whether you want something recent or classic."

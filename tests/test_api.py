@@ -204,3 +204,58 @@ def test_readiness_check():
     assert response.status_code == 200
     assert response.json().get("status") == "ready"
 
+
+@patch("backend.main.chat_with_oracle", return_value="Try Blade Runner 2049, Ex Machina, and Her for thoughtful sci-fi.")
+def test_chat_success(mock_chat):
+    response = client.post(
+        "/api/chat",
+        json={
+            "messages": [
+                {"role": "user", "content": "I want smart sci-fi movies"}
+            ]
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "reply" in data
+    assert "sci-fi" in data["reply"].lower()
+
+
+def test_chat_empty_messages():
+    response = client.post("/api/chat", json={"messages": []})
+    assert response.status_code == 400
+    assert "Messages cannot be empty" in response.json()["detail"]
+
+
+def test_chat_last_message_must_be_user():
+    response = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "assistant", "content": "Hi"}]},
+    )
+    assert response.status_code == 400
+    assert "Last message must be from user" in response.json()["detail"]
+
+
+@patch("backend.main.rank_and_explain", return_value=MOCK_RANKING)
+@patch("backend.main.enrich_movie_data", return_value=MOCK_ENRICHED)
+@patch("backend.main.search_movies", return_value=MOCK_TMDB_RESULTS)
+@patch("backend.main.extract_search_params", return_value=MOCK_AI_PARAMS)
+def test_chat_accepts_budget_roi_and_people_constraints(mock_extract, mock_search, mock_enrich, mock_rank):
+    response = client.post(
+        "/api/chat",
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Christopher Nolan movies with Leonardo DiCaprio, budget under 200M and high ROI",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200
+    reply = response.json().get("reply", "")
+    assert "Inception" in reply
+    assert "Director:" in reply
+    assert "Budget:" in reply
+    assert "ROI:" in reply
+

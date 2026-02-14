@@ -34,3 +34,11 @@ The Oracle synthesizes data from two primary industry sources:
 *   **Backend**: Python, FastAPI (High-performance ASGI), `requests` for API communication.
 *   **Storage**: SQLite3 (Persistent Cache).
 *   **Performance**: Threaded parallel API calls and hardware-accelerated CSS transitions.
+
+## Local development & preview
+- Start the backend dev server:
+  - Run the VS Code task **Run Movie Oracle (dev)** (or from terminal: `.venv/bin/python -m uvicorn backend.main:app --reload --port 8000`).
+- Open the app in VS Code's Simple Browser: press Cmd/Ctrl+Shift+P → `Simple Browser: Open` and enter `http://127.0.0.1:8000/`.
+- The API health endpoint is at `http://127.0.0.1:8000/api/health`.
+
+This lets you edit files and preview changes instantly in a mini browser pane inside VS Code.

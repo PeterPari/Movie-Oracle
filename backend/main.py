@@ -1,7 +1,8 @@
 from pathlib import Path
 import time
+import re
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional, List
+from typing import Optional, List, Literal
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -11,7 +12,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from backend.ai_engine import extract_search_params, rank_and_explain
+from backend.ai_engine import extract_search_params, rank_and_explain, chat_with_oracle
 from backend.movie_api import (
     search_movies, enrich_movie_data, format_movie_result, format_movie_light,
     get_trending_movies, get_upcoming_movies, get_now_playing, get_top_rated,
@@ -44,6 +45,19 @@ def readiness_check():
 
 class SearchRequest(BaseModel):
     query: str
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage] = Field(default_factory=list)
+
+
+class ChatResponse(BaseModel):
+    reply: str
 
 class PersonLink(BaseModel):
     name: str
@@ -98,6 +112,158 @@ class SearchResponse(BaseModel):
     ai_interpretation: str
     summary: str
     results: list[MovieResult]
+
+
+def _parse_roi_value(roi_text: Optional[str]) -> Optional[float]:
+    if not roi_text or not isinstance(roi_text, str):
+        return None
+    match = re.search(r"(\d+(?:\.\d+)?)\s*x", roi_text.lower())
+    if not match:
+        return None
+    try:
+        return float(match.group(1))
+    except Exception:
+        return None
+
+
+def _parse_roi_threshold(query: str) -> Optional[float]:
+    lowered = query.lower()
+    explicit = re.search(r"(?:at least|above|over|minimum|min)\s*(\d+(?:\.\d+)?)\s*x", lowered)
+    if explicit:
+        try:
+            return float(explicit.group(1))
+        except Exception:
+            return None
+    generic = re.search(r"(\d+(?:\.\d+)?)\s*x\s*(?:roi|return)", lowered)
+    if generic:
+        try:
+            return float(generic.group(1))
+        except Exception:
+            return None
+    return None
+
+
+def _build_chat_reply(query: str, movies: List[dict], params: Optional[dict] = None) -> str:
+    lowered = query.lower()
+    wants_budget = any(token in lowered for token in ["budget", "$", "low budget", "big budget"])
+    wants_roi = any(token in lowered for token in ["roi", "return on investment", "high roi", "low roi"])
+    wants_people = any(token in lowered for token in ["actor", "actors", "director", "directed", "starring", "cast", " with ", " by "]) \
+        or bool((params or {}).get("actors")) or bool((params or {}).get("directors"))
+
+    lines = ["Here are relevant picks:"]
+    for movie in movies[:5]:
+        title = movie.get("title") or "Unknown"
+        year = movie.get("year")
+        detail_parts = []
+
+        if year:
+            detail_parts.append(str(year))
+        if wants_people and movie.get("director"):
+            detail_parts.append(f"Director: {movie.get('director')}")
+        if wants_budget and movie.get("budget") and movie.get("budget") != "N/A":
+            detail_parts.append(f"Budget: {movie.get('budget')}")
+        if wants_roi and movie.get("roi") and movie.get("roi") != "N/A":
+            detail_parts.append(f"ROI: {movie.get('roi')}")
+
+        reason = (movie.get("relevance_explanation") or "Strong thematic match for your request.").strip()
+        suffix = f" ({' • '.join(detail_parts)})" if detail_parts else ""
+        lines.append(f"- {title}{suffix} — {reason}")
+
+    return "\n".join(lines)
+
+
+@app.post("/api/chat", response_model=ChatResponse)
+def chat(request: ChatRequest):
+    messages = [
+        {"role": m.role, "content": (m.content or "").strip()}
+        for m in request.messages
+        if (m.content or "").strip()
+    ]
+    if not messages:
+        raise HTTPException(status_code=400, detail="Messages cannot be empty")
+    if messages[-1]["role"] != "user":
+        raise HTTPException(status_code=400, detail="Last message must be from user")
+
+    user_query = messages[-1]["content"].strip()
+    if not user_query:
+        raise HTTPException(status_code=400, detail="User message cannot be empty")
+
+    try:
+        params = extract_search_params(user_query)
+        raw_movies = search_movies(params)
+
+        if raw_movies:
+            enriched = enrich_movie_data(raw_movies)
+            formatted = [format_movie_result(m, resolve_links=False) for m in enriched]
+
+            min_budget = params.get("min_budget")
+            max_budget = params.get("max_budget")
+            if min_budget or max_budget:
+                budget_filtered = []
+                for movie in formatted:
+                    budget_value = movie.get("budget_raw", 0) or 0
+                    if min_budget and budget_value < min_budget:
+                        continue
+                    if max_budget and budget_value > max_budget:
+                        continue
+                    budget_filtered.append(movie)
+                if budget_filtered:
+                    formatted = budget_filtered
+
+            roi_threshold = _parse_roi_threshold(user_query)
+            wants_roi = "roi" in user_query.lower() or "return on investment" in user_query.lower()
+            if roi_threshold is not None:
+                roi_filtered = []
+                for movie in formatted:
+                    roi_value = _parse_roi_value(movie.get("roi"))
+                    if roi_value is not None and roi_value >= roi_threshold:
+                        roi_filtered.append(movie)
+                if roi_filtered:
+                    formatted = roi_filtered
+
+            if wants_roi:
+                formatted.sort(key=lambda m: _parse_roi_value(m.get("roi")) or -1, reverse=True)
+
+            ranking = {"ranked_movies": [], "summary": ""}
+            try:
+                ranking = rank_and_explain(user_query, formatted)
+            except Exception:
+                ranking = {"ranked_movies": [], "summary": ""}
+
+            ranked_movies = ranking.get("ranked_movies", [])
+            rank_map = {
+                item.get("tmdb_id"): item
+                for item in ranked_movies
+                if isinstance(item, dict) and item.get("tmdb_id") is not None
+            }
+
+            for movie in formatted:
+                rank_info = rank_map.get(movie.get("tmdb_id"), {})
+                if rank_info.get("relevance_explanation"):
+                    movie["relevance_explanation"] = rank_info.get("relevance_explanation")
+
+            ranked_ids = [item.get("tmdb_id") for item in ranked_movies if isinstance(item, dict)]
+            if ranked_ids:
+                formatted.sort(
+                    key=lambda movie: ranked_ids.index(movie.get("tmdb_id"))
+                    if movie.get("tmdb_id") in ranked_ids else 999
+                )
+
+            if formatted:
+                return ChatResponse(reply=_build_chat_reply(user_query, formatted, params=params))
+    except Exception:
+        pass
+
+    try:
+        reply = chat_with_oracle([{"role": "user", "content": user_query}])
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"AI chat error: {str(e)}")
+
+    reply = (reply or "").strip()
+    if not reply:
+        reply = "Tell me what vibe you're in the mood for, and I’ll suggest great matches."
+
+    return ChatResponse(reply=reply)
 
 class TrendingResponse(BaseModel):
     trending: list[MovieResult]

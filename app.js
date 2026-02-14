@@ -162,8 +162,11 @@ async function performSearch(query, attempt = 0) {
     const retryDelay = 3000;
 
     try {
+        setLoadingProgress(18, 'Reading your request...');
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout per request
+
+        setLoadingProgress(32, 'Interpreting intent and constraints...');
 
         const response = await fetch(`${API_BASE_URL}/api/search`, {
             method: 'POST',
@@ -173,6 +176,8 @@ async function performSearch(query, attempt = 0) {
         });
         clearTimeout(timeoutId);
 
+        setLoadingProgress(72, 'Fetching and validating movie candidates...');
+
         if (!response.ok) {
             const err = await response.json().catch(() => ({ detail: 'Search failed' }));
             throw new Error(err.detail || `Request failed (${response.status})`);
@@ -180,7 +185,9 @@ async function performSearch(query, attempt = 0) {
 
         backendReady = true;
         hideColdStartNotification();
-        return await response.json();
+        const payload = await response.json();
+        setLoadingProgress(90, 'Ranking your best matches...');
+        return payload;
 
     } catch (error) {
         // Check if it's a network/timeout error that suggests cold start
@@ -195,6 +202,9 @@ async function performSearch(query, attempt = 0) {
                     showColdStartNotification();
                 }, 2000); // Show after 2s if still retrying
             }
+
+            const retryPercent = Math.min(68, 38 + (attempt * 2));
+            setLoadingProgress(retryPercent, `Waking the Oracle servers... retry ${attempt + 1}/${maxAttempts}`);
 
             // Wait and retry
             await new Promise(resolve => setTimeout(resolve, retryDelay));
@@ -230,8 +240,7 @@ async function handleSearch(retryQuery = null) {
 
 
 function displayResults(data) {
-    const progressEl = document.getElementById('loading-progress');
-    if (progressEl) progressEl.style.width = "100%";
+    setLoadingProgress(100, 'Revealing your recommendations...');
 
     setTimeout(() => {
         hideLoading();
@@ -256,7 +265,7 @@ function displayResults(data) {
         allMovies = [...data.results];
         resultsContainer.innerHTML = data.results.map((movie, index) => createBigCard(movie, index + 1, index)).join('');
         lucide.createIcons();
-    }, 500);
+    }, 800);
 }
 
 function createBigCard(movie, rank, index) {
@@ -339,43 +348,62 @@ function closeModal() {
 
 // --- LOADING UI LOGIC ---
 let statusInterval;
+let progressInterval;
+let loadingVisualProgress = 0;
+let loadingTargetProgress = 0;
 
-const loadingSteps = [
-    { text: "Establishing Secure Link...", percent: "15%" },
-    { text: "Contacting Movie API...", percent: "30%" },
-    { text: "Parsing Search Query...", percent: "45%" },
-    { text: "Scanning Cinematic Multiverse...", percent: "60%" },
-    { text: "Cross-referencing Ratings...", percent: "75%" },
-    { text: "Calculating ROI & Budget...", percent: "85%" },
-    { text: "Finalizing Oracle Prediction...", percent: "95%" }
-];
+function startProgressAnimator() {
+    if (progressInterval) clearInterval(progressInterval);
+    progressInterval = setInterval(() => {
+        const progressEl = document.getElementById('loading-progress');
+        if (!progressEl) return;
+
+        const delta = loadingTargetProgress - loadingVisualProgress;
+        if (Math.abs(delta) < 0.2) {
+            loadingVisualProgress = loadingTargetProgress;
+        } else {
+            const step = Math.max(0.5, Math.abs(delta) * 0.18);
+            loadingVisualProgress += delta > 0 ? step : -step;
+        }
+
+        const clamped = Math.max(0, Math.min(100, loadingVisualProgress));
+        progressEl.style.width = `${clamped.toFixed(1)}%`;
+    }, 45);
+}
+
+function resetLoadingProgress() {
+    loadingVisualProgress = 0;
+    loadingTargetProgress = 0;
+    const progressEl = document.getElementById('loading-progress');
+    if (progressEl) progressEl.style.width = '0%';
+}
+
+function setLoadingProgress(percent, message) {
+    const subtitleEl = document.getElementById('loading-subtitle');
+    if (!subtitleEl) return;
+
+    const safePercent = Math.max(0, Math.min(100, Math.round(percent)));
+    loadingTargetProgress = Math.max(loadingTargetProgress, safePercent);
+    subtitleEl.textContent = message;
+    subtitleEl.className = 'text-accent-gold/70 uppercase tracking-[0.2em] text-[10px] font-bold animate-pulse';
+}
 
 function cycleStatusMessages() {
-    const subtitleEl = document.getElementById('loading-subtitle');
-    const progressEl = document.getElementById('loading-progress');
-    if (!subtitleEl || !progressEl) return;
-
-    let index = 0;
-    progressEl.style.width = '0%';
-    subtitleEl.textContent = 'Initializing...';
-    subtitleEl.className = 'text-accent-gold/70 uppercase tracking-[0.2em] text-[10px] font-bold animate-pulse';
-
     if (statusInterval) clearInterval(statusInterval);
-
-    setTimeout(() => {
-        subtitleEl.textContent = loadingSteps[0].text;
-        progressEl.style.width = loadingSteps[0].percent;
-    }, 50);
-
+    const idleMessages = [
+        'Calibrating taste profile...',
+        'Matching tone, cast, and vibe...',
+        'Scoring relevance with Oracle logic...'
+    ];
+    let idleIndex = 0;
     statusInterval = setInterval(() => {
-        index++;
-        if (index >= loadingSteps.length) {
-            clearInterval(statusInterval);
-            return;
-        }
-        subtitleEl.textContent = loadingSteps[index].text;
-        progressEl.style.width = loadingSteps[index].percent;
-    }, 800);
+        const progressEl = document.getElementById('loading-progress');
+        const currentWidth = progressEl ? parseFloat(progressEl.style.width || '0') : 0;
+        if (currentWidth >= 92) return;
+        idleIndex = (idleIndex + 1) % idleMessages.length;
+        const bumped = Math.min(92, currentWidth + 1.5);
+        setLoadingProgress(bumped, idleMessages[idleIndex]);
+    }, 900);
 }
 
 function showLoading() {
@@ -388,6 +416,10 @@ function showLoading() {
     errorState.classList.add('hidden');
     document.body.classList.add('results-mode');
     animateOracleText();
+    resetLoadingProgress();
+    startProgressAnimator();
+    setLoadingProgress(8, 'Opening a channel to the Oracle...');
+    if (statusInterval) clearInterval(statusInterval);
     cycleStatusMessages();
     lucide.createIcons();
 }
@@ -395,6 +427,7 @@ function showLoading() {
 function hideLoading() {
     loading.classList.add('hidden');
     if (statusInterval) clearInterval(statusInterval);
+    if (progressInterval) clearInterval(progressInterval);
 }
 
 function showError(message, query) {
